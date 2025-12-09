@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { getAssetPath } from '@/lib/asset-path'
 
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -57,7 +58,7 @@ export default function AdminLayout({
 
         <div className="p-4">
           <Image
-            src="/ethboulder_wordmark.svg"
+            src={getAssetPath('ethboulder_wordmark.svg')}
             alt="EthBoulder"
             width={120}
             height={20}

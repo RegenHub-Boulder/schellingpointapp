@@ -11,6 +11,7 @@ import { Footer } from '@/components/layout/footer'
 import { AuthModal } from '@/components/auth/auth-modal'
 import { ProfileSetup } from '@/components/auth/profile-setup'
 import { OnboardingTutorial } from '@/components/auth/onboarding-tutorial'
+import { getAssetPath } from '@/lib/asset-path'
 
 type AuthStep = 'none' | 'auth' | 'profile' | 'onboarding'
 
@@ -86,7 +87,7 @@ export default function LandingPage() {
         <Container>
           <div className="flex h-14 sm:h-16 items-center justify-between">
             <Image
-              src="/ethboulder_wordmark.svg"
+              src={getAssetPath('ethboulder_wordmark.svg')}
               alt="EthBoulder"
               width={140}
               height={24}

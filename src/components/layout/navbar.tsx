@@ -7,6 +7,7 @@ import { Menu, X, User, LogOut, Settings, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { CreditBar } from '@/components/voting/credit-bar'
+import { getAssetPath } from '@/lib/asset-path'
 
 interface NavbarProps {
   eventName?: string
@@ -38,7 +39,7 @@ export function Navbar({
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/ethboulder_wordmark.svg"
+              src={getAssetPath('ethboulder_wordmark.svg')}
               alt="EthBoulder"
               width={140}
               height={24}
