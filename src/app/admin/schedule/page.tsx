@@ -14,7 +14,9 @@ import {
   Send,
   X,
   Clock,
-  Users
+  Users,
+  Lock,
+  Unlock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -40,6 +42,7 @@ interface ScheduleSession {
   durationMinutes: number
   venueId?: string
   slotId?: string
+  locked?: boolean
 }
 
 interface Venue {
@@ -128,11 +131,18 @@ export default function AdminSchedulePage() {
           clearInterval(interval)
           setIsGenerating(false)
           setGenerated(true)
-          // Apply algorithm output
-          setSessions(prev => prev.map(s => ({
-            ...s,
-            ...algorithmOutput[s.id]
-          })))
+          // Apply algorithm output, but preserve locked sessions
+          setSessions(prev => prev.map(s => {
+            // If session is locked, keep its current placement
+            if (s.locked && s.venueId && s.slotId) {
+              return s
+            }
+            // Otherwise apply algorithm output
+            return {
+              ...s,
+              ...algorithmOutput[s.id]
+            }
+          }))
           return 100
         }
         return prev + 10
@@ -181,6 +191,13 @@ export default function AdminSchedulePage() {
 
   const handleEditSchedule = () => {
     setIsEditing(true)
+  }
+
+  const handleToggleLock = (sessionId: string) => {
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, locked: !s.locked } : s
+    ))
+    setHasChanges(true)
   }
 
   const getSessionForCell = (venueId: string, slotId: string) => {
@@ -324,14 +341,26 @@ export default function AdminSchedulePage() {
             <CardHeader>
               <CardTitle className="text-base">Algorithm Optimization</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>The algorithm will optimize for:</p>
-              <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>Minimize audience conflicts (based on voter overlap)</li>
-                <li>Match venue capacity to session demand</li>
-                <li>Respect all manual constraints</li>
-                <li>Balance high-demand sessions across time slots</li>
-              </ul>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <div>
+                <p className="mb-2">The algorithm will optimize for:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Minimize audience conflicts (based on voter overlap)</li>
+                  <li>Match venue capacity to session demand</li>
+                  <li>Respect all manual constraints</li>
+                  <li>Balance high-demand sessions across time slots</li>
+                </ul>
+              </div>
+              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
+                <div className="flex items-center gap-2 font-medium mb-1">
+                  <Lock className="h-4 w-4" />
+                  Pro Tip: Lock Important Sessions
+                </div>
+                <p className="text-sm">
+                  Before generating, you can manually place keynotes or pre-booked sessions and lock them.
+                  The algorithm will schedule all other sessions around your locked placements.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
@@ -542,17 +571,42 @@ export default function AdminSchedulePage() {
                                   className={cn(
                                     'w-full h-full p-2 rounded-lg cursor-grab active:cursor-grabbing relative group',
                                     trackConfig[session.track].color,
-                                    isOverCapacity && 'ring-2 ring-amber-500'
+                                    isOverCapacity && 'ring-2 ring-amber-500',
+                                    session.locked && 'ring-2 ring-white/50'
                                   )}
                                 >
-                                  <button
-                                    onClick={() => handleRemoveFromSchedule(session.id)}
-                                    className="absolute top-1 right-1 p-1 rounded bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    <X className="h-3 w-3 text-white" />
-                                  </button>
+                                  <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleToggleLock(session.id)
+                                      }}
+                                      className="p-1 rounded bg-black/20 hover:bg-black/30"
+                                      title={session.locked ? 'Unlock session' : 'Lock session'}
+                                    >
+                                      {session.locked ? (
+                                        <Lock className="h-3 w-3 text-white" />
+                                      ) : (
+                                        <Unlock className="h-3 w-3 text-white" />
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleRemoveFromSchedule(session.id)
+                                      }}
+                                      className="p-1 rounded bg-black/20 hover:bg-black/30"
+                                      title="Remove from schedule"
+                                    >
+                                      <X className="h-3 w-3 text-white" />
+                                    </button>
+                                  </div>
                                   <div className="flex items-center gap-1 mb-1">
-                                    <GripVertical className="h-3 w-3 text-white/70" />
+                                    {session.locked ? (
+                                      <Lock className="h-3 w-3 text-white" />
+                                    ) : (
+                                      <GripVertical className="h-3 w-3 text-white/70" />
+                                    )}
                                     <span className="text-xs text-white font-medium line-clamp-1">
                                       {session.title}
                                     </span>

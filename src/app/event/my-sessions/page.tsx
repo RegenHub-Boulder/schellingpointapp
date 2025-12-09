@@ -16,12 +16,14 @@ import {
   ExternalLink,
   FileText,
   Upload,
+  Home,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SelfHostedModal } from '@/components/sessions/self-hosted-modal'
 
-type SessionStatus = 'pending' | 'approved' | 'scheduled' | 'rejected'
+type SessionStatus = 'pending' | 'approved' | 'scheduled' | 'rejected' | 'self-hosted'
 
 interface Session {
   id: number
@@ -38,6 +40,12 @@ interface Session {
     features: string[]
   }
   scheduledTime?: string
+  selfHostedDetails?: {
+    venue: string
+    date: string
+    time: string
+    notes?: string
+  }
   mergeSuggestions?: {
     sessionId: number
     sessionTitle: string
@@ -52,10 +60,11 @@ export default function MySessionsPage() {
   const [sessionsWithTranscripts, setSessionsWithTranscripts] = React.useState<Set<number>>(
     new Set()
   )
+  const [selfHostedSessionId, setSelfHostedSessionId] = React.useState<number | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   // Mock data - in real app, this would come from API
-  const mySessions: Session[] = [
+  const mockSessions: Session[] = [
     {
       id: 1,
       title: 'Decentralized Identity Solutions',
@@ -114,6 +123,8 @@ export default function MySessionsPage() {
     },
   ]
 
+  const [sessions, setSessions] = React.useState<Session[]>(mockSessions)
+
   const statusConfig = {
     pending: {
       icon: <AlertCircle className="h-4 w-4" />,
@@ -138,6 +149,12 @@ export default function MySessionsPage() {
       label: 'Not Scheduled',
       variant: 'destructive' as const,
       description: 'Did not receive enough votes',
+    },
+    'self-hosted': {
+      icon: <Home className="h-4 w-4" />,
+      label: 'Community Session',
+      variant: 'secondary' as const,
+      description: 'Self-hosted at external venue',
     },
   }
 
@@ -187,11 +204,30 @@ export default function MySessionsPage() {
     e.target.value = ''
   }
 
+  const handleSelfHostedConfirm = (details: {
+    venue: string
+    date: string
+    time: string
+    notes?: string
+  }) => {
+    if (selfHostedSessionId !== null) {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === selfHostedSessionId
+            ? { ...s, status: 'self-hosted' as SessionStatus, selfHostedDetails: details }
+            : s
+        )
+      )
+      setSelfHostedSessionId(null)
+    }
+  }
+
   const stats = {
-    total: mySessions.length,
-    scheduled: mySessions.filter((s) => s.status === 'scheduled').length,
-    approved: mySessions.filter((s) => s.status === 'approved').length,
-    pending: mySessions.filter((s) => s.status === 'pending').length,
+    total: sessions.length,
+    scheduled: sessions.filter((s) => s.status === 'scheduled').length,
+    approved: sessions.filter((s) => s.status === 'approved').length,
+    pending: sessions.filter((s) => s.status === 'pending').length,
+    selfHosted: sessions.filter((s) => s.status === 'self-hosted').length,
   }
 
   return (
@@ -238,7 +274,7 @@ export default function MySessionsPage() {
 
       {/* Sessions List */}
       <div className="space-y-4">
-        {mySessions.map((session) => {
+        {sessions.map((session) => {
           const statusInfo = statusConfig[session.status]
           return (
             <Card key={session.id} className="p-6">
@@ -268,6 +304,17 @@ export default function MySessionsPage() {
                         : sessionsWithTranscripts.has(session.id)
                         ? 'Update Transcript'
                         : 'Upload Transcript'}
+                    </Button>
+                  )}
+                  {(session.status === 'rejected' || session.status === 'approved') && !session.selfHostedDetails && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelfHostedSessionId(session.id)}
+                      className="text-primary border-primary"
+                    >
+                      <Home className="h-4 w-4 mr-1" />
+                      Make Self-Hosted
                     </Button>
                   )}
                   <Button variant="ghost" size="sm">
@@ -331,6 +378,38 @@ export default function MySessionsPage() {
                 </div>
               )}
 
+              {/* Self-Hosted Details */}
+              {session.selfHostedDetails && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Home className="h-4 w-4 text-blue-700" />
+                    <div className="text-sm font-medium text-blue-900">Community Session Details</div>
+                  </div>
+                  <div className="space-y-1 text-sm text-blue-800">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3 w-3" />
+                      <strong>Location:</strong> {session.selfHostedDetails.venue}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      <strong>Date:</strong> {session.selfHostedDetails.date}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3 w-3" />
+                      <strong>Time:</strong> {session.selfHostedDetails.time}
+                    </div>
+                    {session.selfHostedDetails.notes && (
+                      <div className="flex items-start gap-2 mt-2">
+                        <FileText className="h-3 w-3 mt-0.5" />
+                        <div>
+                          <strong>Notes:</strong> {session.selfHostedDetails.notes}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Merge Suggestions */}
               {session.mergeSuggestions && session.mergeSuggestions.length > 0 && (
                 <div className="border-t pt-4">
@@ -385,7 +464,7 @@ export default function MySessionsPage() {
       </div>
 
       {/* Empty State */}
-      {mySessions.length === 0 && (
+      {sessions.length === 0 && (
         <Card className="p-12">
           <div className="text-center">
             <div className="flex justify-center mb-4">
@@ -400,6 +479,16 @@ export default function MySessionsPage() {
             <Button>Propose Your First Session</Button>
           </div>
         </Card>
+      )}
+
+      {/* Self-Hosted Modal */}
+      {selfHostedSessionId !== null && (
+        <SelfHostedModal
+          open={selfHostedSessionId !== null}
+          onOpenChange={(open) => !open && setSelfHostedSessionId(null)}
+          sessionTitle={sessions.find((s) => s.id === selfHostedSessionId)?.title || ''}
+          onConfirm={handleSelfHostedConfirm}
+        />
       )}
     </div>
   )

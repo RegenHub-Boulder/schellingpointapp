@@ -62,6 +62,13 @@ export interface Session {
   mergedFromIds?: string[]
   venueId?: string
   timeSlotId?: string
+  locked?: boolean
+  selfHostedDetails?: {
+    venue: string
+    date: string
+    time: string
+    notes?: string
+  }
   createdAt: Date
   updatedAt: Date
 }
