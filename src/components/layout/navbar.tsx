@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Menu, X, User, LogOut, Settings, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -36,12 +37,14 @@ export function Navbar({
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-              SP
-            </div>
-            <span className="font-semibold hidden sm:inline-block">
-              Schelling Point
-            </span>
+            <Image
+              src="/ethboulder_wordmark.svg"
+              alt="EthBoulder"
+              width={140}
+              height={24}
+              className="h-5 sm:h-6 w-auto"
+              priority
+            />
           </Link>
 
           {eventName && (

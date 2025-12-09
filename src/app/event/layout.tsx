@@ -54,7 +54,7 @@ export default function EventLayout({
 }) {
   // Mock data - in real app, this would come from context/API
   const event = {
-    name: 'Web3 Innovation Summit',
+    name: 'EthBoulder 2026',
     status: 'voting_open' as const,
   }
 

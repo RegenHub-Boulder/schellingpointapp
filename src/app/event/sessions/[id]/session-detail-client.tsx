@@ -69,7 +69,7 @@ This session is ideal for developers, product managers, and anyone interested in
       capacity: 100,
       features: ['Projector', 'Whiteboard', 'Sound System', 'Recording Equipment'],
     },
-    scheduledTime: 'March 15, 2024 at 10:00 AM',
+    scheduledTime: 'February 28, 2026 at 10:00 AM',
     requirements: [
       'Laptop with Node.js installed',
       'Basic understanding of public-key cryptography',

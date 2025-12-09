@@ -24,7 +24,7 @@ export default function AdminOverviewPage() {
       <div>
         <h1 className="text-2xl font-bold">Event Overview</h1>
         <p className="text-muted-foreground mt-1">
-          Web3 Innovation Summit • March 15-16, 2024
+          EthBoulder 2026 • Feb 27 - Mar 1, 2026
         </p>
       </div>
 

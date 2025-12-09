@@ -16,7 +16,7 @@ import {
 export default function AdminSettingsPage() {
   const [settings, setSettings] = React.useState({
     // Event Settings
-    eventName: 'Web3 Innovation Summit',
+    eventName: 'EthBoulder 2026',
     eventStatus: 'voting_open',
     votingCreditsPerUser: 100,
     sessionBudget: 10000,
@@ -28,7 +28,7 @@ export default function AdminSettingsPage() {
     allowVoting: true,
     allowMerges: true,
     requireApproval: true,
-    votingDeadline: '2024-03-14T23:59',
+    votingDeadline: '2026-02-26T23:59',
 
     // Notification Settings
     notifyOnNewSession: true,

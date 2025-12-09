@@ -8,8 +8,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Schelling Point - Self-Organizing Unconference Platform',
-  description: 'Transform how unconferences work with quadratic voting for session scheduling and budget distribution.',
+  title: 'EthBoulder - Community-Driven Ethereum Unconference',
+  description: 'Join the EthBoulder unconference - a community-driven event using quadratic voting to democratically schedule sessions and distribute resources.',
 }
 
 export default function RootLayout({

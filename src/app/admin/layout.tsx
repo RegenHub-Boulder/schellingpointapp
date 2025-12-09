@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -55,9 +56,16 @@ export default function AdminLayout({
         </div>
 
         <div className="p-4">
-          <h2 className="font-semibold">Admin Dashboard</h2>
+          <Image
+            src="/ethboulder_wordmark.svg"
+            alt="EthBoulder"
+            width={120}
+            height={20}
+            className="h-4 sm:h-5 w-auto mb-3"
+          />
+          <h2 className="font-semibold text-sm">Admin Dashboard</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Web3 Innovation Summit
+            EthBoulder 2026
           </p>
         </div>
 

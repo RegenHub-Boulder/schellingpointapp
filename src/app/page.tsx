@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Calendar, MapPin, Users, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -64,14 +65,14 @@ export default function LandingPage() {
           if (!open) setAuthStep('none')
         }}
         onComplete={handleAuthComplete}
-        eventName="Web3 Innovation Summit"
+        eventName="EthBoulder 2026"
       />
 
       {/* Profile Setup Modal - For demo, auto-trigger after auth modal closes */}
       <ProfileSetup
         open={authStep === 'profile'}
         onComplete={handleProfileComplete}
-        eventName="Web3 Innovation Summit"
+        eventName="EthBoulder 2026"
       />
 
       {/* Onboarding Tutorial */}
@@ -83,13 +84,15 @@ export default function LandingPage() {
       {/* Header */}
       <header className="border-b">
         <Container>
-          <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-                SP
-              </div>
-              <span className="font-semibold">Schelling Point</span>
-            </div>
+          <div className="flex h-14 sm:h-16 items-center justify-between">
+            <Image
+              src="/ethboulder_wordmark.svg"
+              alt="EthBoulder"
+              width={140}
+              height={24}
+              className="h-5 sm:h-6 w-auto"
+              priority
+            />
             <Button size="sm" onClick={handleEnterEvent} data-testid="header-enter-btn">
               Enter Event
             </Button>
@@ -110,22 +113,22 @@ export default function LandingPage() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">
-              Web3 Innovation Summit
+              EthBoulder 2026
             </h1>
 
             <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-              A self-organizing unconference where participants vote on sessions
-              and determine how the budget is distributed to speakers.
+              A community-driven Ethereum unconference where participants vote on sessions
+              and collectively determine how the budget is distributed to speakers.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4" />
-                <span>March 15-16, 2024</span>
+                <span>Feb 27 - Mar 1, 2026</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-4 w-4" />
-                <span>San Francisco, CA</span>
+                <span>Boulder, Colorado</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Users className="h-4 w-4" />
