@@ -47,9 +47,9 @@ export function useVoting() {
 
       const passkeyInfo: PasskeyInfo = JSON.parse(passkeyData)
 
-      // 2. Generate ephemeral wallet (valid for 7 days)
+      // 2. Generate ephemeral wallet (valid for 24 hours)
       const ephemeralWallet = ethers.Wallet.createRandom()
-      const expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60 // 7 days from now
+      const expiry = Math.floor(Date.now() / 1000) + 24 * 60 * 60 // 24 hours from now
 
       // 3. Build message for passkey to sign
       // The contract expects a message of: keccak256(abi.encodePacked(signer, expiry))
@@ -129,10 +129,16 @@ export function useVoting() {
     }
   }
 
-  // Cast vote (uses session key, no Face ID)
+  // Check if user has registered passkey
+  function hasPasskey(): boolean {
+    return !!localStorage.getItem('passkeyInfo')
+  }
+
+  // Cast vote (auto-authorizes if needed)
   async function castVote(topicId: number, amount: number): Promise<string> {
+    // Auto-authorize if no valid session
     if (!hasValidSession()) {
-      throw new Error('No valid session - call authorizeSession first')
+      await authorizeSession()
     }
 
     setIsVoting(true)
@@ -208,6 +214,7 @@ export function useVoting() {
   }
 
   return {
+    hasPasskey,
     hasValidSession,
     authorizeSession,
     castVote,
