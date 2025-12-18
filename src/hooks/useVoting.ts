@@ -61,12 +61,16 @@ export function useVoting() {
       )
 
       // Convert to buffer for WebAuthn
-      const challenge = ethers.getBytes(messageHash)
+      const challengeBytes = ethers.getBytes(messageHash)
+      const challenge = challengeBytes.buffer.slice(
+        challengeBytes.byteOffset,
+        challengeBytes.byteOffset + challengeBytes.byteLength
+      )
 
       // 4. Trigger WebAuthn authentication (Face ID)
       const assertion = await navigator.credentials.get({
         publicKey: {
-          challenge: challenge,
+          challenge: challenge as ArrayBuffer,
           rpId: window.location.hostname,
           allowCredentials: [{
             id: base64UrlToArrayBuffer(passkeyInfo.credentialId),
