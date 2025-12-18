@@ -1,18 +1,18 @@
 'use client'
 
 import * as React from 'react'
-import { Clock, MapPin, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Clock, MapPin, ChevronRight, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { TapToVote } from '@/components/voting/tap-to-vote'
 import { VoteDots } from '@/components/voting/vote-dots'
 import { calculateQuadraticCost } from '@/lib/utils'
+import { useVoting } from '@/hooks/useVoting'
 
-// Mock data
+// Mock data - in production, fetch from API
 const currentSession = {
-  id: '1',
+  id: 1, // topicId for the contract
   title: 'Building DAOs That Actually Work',
   host: 'Alice Chen',
   venue: 'Main Hall',
@@ -21,12 +21,16 @@ const currentSession = {
 }
 
 const votedSessions = [
-  { id: '0', title: 'Opening Keynote', votes: 2 },
+  { id: 0, title: 'Opening Keynote', votes: 2 },
 ]
 
 export default function LiveVotingPage() {
   const [votes, setVotes] = React.useState(0)
   const [allVotes, setAllVotes] = React.useState(votedSessions)
+  const [error, setError] = React.useState<string | null>(null)
+  const [lastTxHash, setLastTxHash] = React.useState<string | null>(null)
+
+  const { hasPasskey, hasValidSession, castVote, isAuthorizing, isVoting } = useVoting()
 
   const totalCredits = 100
   const spentCredits =
@@ -34,8 +38,17 @@ export default function LiveVotingPage() {
     allVotes.reduce((sum, v) => sum + calculateQuadraticCost(v.votes), 0)
   const remainingCredits = totalCredits - spentCredits
 
-  const handleVote = () => {
-    setVotes(votes + 1)
+  const handleVote = async () => {
+    setError(null)
+    try {
+      // Cast vote on-chain (auto-authorizes if needed)
+      const txHash = await castVote(currentSession.id, 1)
+      setLastTxHash(txHash)
+      setVotes(votes + 1)
+    } catch (err) {
+      console.error('Vote error:', err)
+      setError(err instanceof Error ? err.message : 'Vote failed')
+    }
   }
 
   return (
@@ -75,12 +88,44 @@ export default function LiveVotingPage() {
         <CreditBar total={totalCredits} spent={spentCredits} />
       </div>
 
+      {/* Error display */}
+      {error && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <span className="text-sm text-destructive">{error}</span>
+        </div>
+      )}
+
+      {/* Authorization/Voting status */}
+      {(isAuthorizing || isVoting) && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
+          <span className="text-sm text-primary">
+            {isAuthorizing ? 'Authorizing session (Face ID)...' : 'Submitting vote on-chain...'}
+          </span>
+        </div>
+      )}
+
+      {/* Last tx hash */}
+      {lastTxHash && (
+        <div className="mx-4 mt-2 text-center">
+          <a
+            href={`https://sepolia.basescan.org/tx/${lastTxHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-primary underline"
+          >
+            View last vote on Basescan
+          </a>
+        </div>
+      )}
+
       {/* Tap to Vote */}
       <div className="flex-1 flex items-center justify-center p-8">
         <TapToVote
           votes={votes}
           onVote={handleVote}
           remainingCredits={remainingCredits}
+          disabled={isAuthorizing || isVoting}
         />
       </div>
 
