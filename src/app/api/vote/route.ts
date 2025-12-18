@@ -43,8 +43,15 @@ export async function POST(request: NextRequest) {
       )
     )
 
+    console.log('Vote check:')
+    console.log('  identityHash:', identityHash)
+    console.log('  signer:', signer)
+
     const signerExpiry = await contract.signers(identityHash, signer)
     const currentTime = Math.floor(Date.now() / 1000)
+
+    console.log('  expiry:', signerExpiry.toString())
+    console.log('  currentTime:', currentTime)
 
     if (!signerExpiry || Number(signerExpiry) <= currentTime) {
       return NextResponse.json(
