@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointVotes'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

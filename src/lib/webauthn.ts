@@ -3,10 +3,17 @@
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
 import * as CBOR from 'cbor-web'
 
+// Type for decoded attestation object
+interface AttestationObject {
+  authData: ArrayBuffer
+  fmt: string
+  attStmt: unknown
+}
+
 // Extract P-256 public key coordinates from WebAuthn attestation
 export async function extractPublicKey(attestationObject: ArrayBuffer): Promise<{ pubKeyX: string; pubKeyY: string }> {
   // The attestationObject is CBOR-encoded
-  const decoded = await CBOR.decodeFirst(new Uint8Array(attestationObject))
+  const decoded = await CBOR.decodeFirst(new Uint8Array(attestationObject)) as AttestationObject
 
   // Extract authData from the attestation object
   const authData = new Uint8Array(decoded.authData)
@@ -32,15 +39,15 @@ export async function extractPublicKey(attestationObject: ArrayBuffer): Promise<
 
   // Now we're at the credentialPublicKey (CBOR-encoded COSE key)
   const publicKeyBytes = authData.slice(offset)
-  const publicKey = await CBOR.decodeFirst(publicKeyBytes)
+  const publicKey = await CBOR.decodeFirst(publicKeyBytes) as Map<number, ArrayBuffer>
 
   // COSE key format for P-256:
   // -1: kty (key type) = 2 (EC2)
   // -2: x coordinate (32 bytes)
   // -3: y coordinate (32 bytes)
 
-  const x = new Uint8Array(publicKey.get(-2))
-  const y = new Uint8Array(publicKey.get(-3))
+  const x = new Uint8Array(publicKey.get(-2)!)
+  const y = new Uint8Array(publicKey.get(-3)!)
 
   return {
     pubKeyX: arrayBufferToHex(x.buffer),
@@ -64,7 +71,12 @@ export function hexToArrayBuffer(hex: string): ArrayBuffer {
 }
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
 }
 
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
