@@ -1,8 +1,9 @@
 import { ethers } from 'ethers'
 import { useState } from 'react'
-import { formatWebAuthnSignature, arrayBufferToBase64Url, base64UrlToArrayBuffer } from '@/lib/webauthn'
+import { base64UrlToArrayBuffer, arrayBufferToHex } from '@/lib/webauthn'
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532)
 
 interface PasskeyInfo {
   credentialId: string
@@ -21,25 +22,24 @@ export function useVoting() {
   const [isAuthorizing, setIsAuthorizing] = useState(false)
   const [isVoting, setIsVoting] = useState(false)
 
-  // Check if we have a valid session in localStorage
   function hasValidSession(): boolean {
     const sessionData = localStorage.getItem('sessionKey')
     if (!sessionData) return false
-
     try {
       const session: SessionKey = JSON.parse(sessionData)
-      const currentTime = Math.floor(Date.now() / 1000)
-      return session.expiry > currentTime
+      return session.expiry > Math.floor(Date.now() / 1000)
     } catch {
       return false
     }
   }
 
-  // Authorize ephemeral signer (requires Face ID)
+  function hasPasskey(): boolean {
+    return !!localStorage.getItem('passkeyInfo')
+  }
+
   async function authorizeSession(): Promise<void> {
     setIsAuthorizing(true)
     try {
-      // 1. Get passkey from localStorage
       const passkeyData = localStorage.getItem('passkeyInfo')
       if (!passkeyData) {
         throw new Error('No passkey found. Please register first.')
@@ -47,27 +47,27 @@ export function useVoting() {
 
       const passkeyInfo: PasskeyInfo = JSON.parse(passkeyData)
 
-      // 2. Generate ephemeral wallet (valid for 24 hours)
+      // Generate ephemeral wallet
       const ephemeralWallet = ethers.Wallet.createRandom()
-      const expiry = Math.floor(Date.now() / 1000) + 24 * 60 * 60 // 24 hours from now
+      const expiry = Math.floor(Date.now() / 1000) + 24 * 60 * 60
 
-      // 3. Build message for passkey to sign
-      // The contract expects a message of: keccak256(abi.encodePacked(signer, expiry))
-      const messageHash = ethers.keccak256(
-        ethers.solidityPacked(
-          ['address', 'uint256'],
-          [ephemeralWallet.address, expiry]
+      // Build challenge: keccak256(abi.encode(signer, expiry, chainid, contract))
+      // This is what the contract expects in clientDataJSON
+      const expectedChallenge = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['address', 'uint256', 'uint256', 'address'],
+          [ephemeralWallet.address, expiry, CHAIN_ID, CONTRACT_ADDRESS]
         )
       )
 
-      // Convert to buffer for WebAuthn
-      const challengeBytes = ethers.getBytes(messageHash)
+      // Convert to ArrayBuffer for WebAuthn
+      const challengeBytes = ethers.getBytes(expectedChallenge)
       const challenge = challengeBytes.buffer.slice(
         challengeBytes.byteOffset,
         challengeBytes.byteOffset + challengeBytes.byteLength
       )
 
-      // 4. Trigger WebAuthn authentication (Face ID)
+      // Request WebAuthn signature
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge: challenge as ArrayBuffer,
@@ -85,65 +85,81 @@ export function useVoting() {
         throw new Error('Authentication cancelled')
       }
 
-      // Extract signature from WebAuthn response
       const response = assertion.response as AuthenticatorAssertionResponse
-      const signatureHex = formatWebAuthnSignature(response.signature)
 
-      // Parse signature into r and s (each 32 bytes)
-      const r = '0x' + signatureHex.slice(2, 66) // First 32 bytes
-      const s = '0x' + signatureHex.slice(66, 130) // Second 32 bytes
+      // Get authenticatorData as hex
+      const authenticatorData = arrayBufferToHex(response.authenticatorData)
 
-      // 5. POST to /api/authorize
+      // Get clientDataJSON as string
+      const clientDataJSON = new TextDecoder().decode(response.clientDataJSON)
+
+      // Parse DER signature to get r, s
+      const sigBytes = new Uint8Array(response.signature)
+      let offset = 2
+      if (sigBytes[1] & 0x80) offset++
+
+      const rLen = sigBytes[offset + 1]
+      const rStart = offset + 2
+      let r = sigBytes.slice(rStart, rStart + rLen)
+
+      offset = rStart + rLen
+      const sLen = sigBytes[offset + 1]
+      const sStart = offset + 2
+      let s = sigBytes.slice(sStart, sStart + sLen)
+
+      // Remove leading zeros if present
+      if (r[0] === 0 && r.length > 32) r = r.slice(1)
+      if (s[0] === 0 && s.length > 32) s = s.slice(1)
+
+      // Pad to 32 bytes
+      const rPadded = new Uint8Array(32)
+      const sPadded = new Uint8Array(32)
+      rPadded.set(r, 32 - r.length)
+      sPadded.set(s, 32 - s.length)
+
+      const rHex = '0x' + Array.from(rPadded).map(b => b.toString(16).padStart(2, '0')).join('')
+      const sHex = '0x' + Array.from(sPadded).map(b => b.toString(16).padStart(2, '0')).join('')
+
+      // Send to API
       const authResponse = await fetch('/api/authorize', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pubKeyX: passkeyInfo.pubKeyX,
           pubKeyY: passkeyInfo.pubKeyY,
           signer: ephemeralWallet.address,
           expiry,
-          signature: [r, s]
+          authenticatorData,
+          clientDataJSON,
+          r: rHex,
+          s: sHex
         })
       })
 
       const data = await authResponse.json()
-
       if (!authResponse.ok) {
         throw new Error(data.error || 'Authorization failed')
       }
 
-      // 6. Store session key in localStorage
-      const sessionKey: SessionKey = {
+      // Store session key
+      localStorage.setItem('sessionKey', JSON.stringify({
         privateKey: ephemeralWallet.privateKey,
         address: ephemeralWallet.address,
         expiry
-      }
-
-      localStorage.setItem('sessionKey', JSON.stringify(sessionKey))
-      localStorage.setItem('passkeyInfo', JSON.stringify(passkeyInfo))
+      }))
 
     } finally {
       setIsAuthorizing(false)
     }
   }
 
-  // Check if user has registered passkey
-  function hasPasskey(): boolean {
-    return !!localStorage.getItem('passkeyInfo')
-  }
-
-  // Cast vote (auto-authorizes if needed)
   async function castVote(topicId: number, amount: number): Promise<string> {
-    // Auto-authorize if no valid session
     if (!hasValidSession()) {
       await authorizeSession()
     }
 
     setIsVoting(true)
     try {
-      // 1. Get passkey and session from localStorage
       const passkeyData = localStorage.getItem('passkeyInfo')
       const sessionData = localStorage.getItem('sessionKey')
 
@@ -154,58 +170,55 @@ export function useVoting() {
       const passkeyInfo: PasskeyInfo = JSON.parse(passkeyData)
       const sessionKey: SessionKey = JSON.parse(sessionData)
 
-      // 2. Get nonce from /api/nonce
+      // Get nonce
       const nonceResponse = await fetch(
         `/api/nonce?pubKeyX=${encodeURIComponent(passkeyInfo.pubKeyX)}&pubKeyY=${encodeURIComponent(passkeyInfo.pubKeyY)}`
       )
-
       const nonceData = await nonceResponse.json()
-
       if (!nonceResponse.ok) {
         throw new Error(nonceData.error || 'Failed to get nonce')
       }
 
       const nonce = nonceData.nonce
 
-      // 3. Build and sign message with session key
-      // The contract expects: keccak256(abi.encodePacked(topicId, amount, nonce))
-      const messageHash = ethers.keccak256(
-        ethers.solidityPacked(
-          ['uint256', 'int256', 'uint256'],
-          [topicId, amount, nonce]
+      // Build message
+      const identityHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['uint256', 'uint256'],
+          [passkeyInfo.pubKeyX, passkeyInfo.pubKeyY]
         )
       )
 
-      // Sign with ephemeral wallet
+      const messageHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['string', 'bytes32', 'uint256', 'uint256', 'uint256', 'uint256', 'address'],
+          ['vote', identityHash, topicId, amount, nonce, CHAIN_ID, CONTRACT_ADDRESS]
+        )
+      )
+
+      // Sign with session key
       const wallet = new ethers.Wallet(sessionKey.privateKey)
       const signature = await wallet.signMessage(ethers.getBytes(messageHash))
 
-      // Parse ECDSA signature into r, s, v
-      const sig = ethers.Signature.from(signature)
-
-      // 4. POST to /api/vote
+      // Send to API
       const voteResponse = await fetch('/api/vote', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pubKeyX: passkeyInfo.pubKeyX,
           pubKeyY: passkeyInfo.pubKeyY,
           signer: sessionKey.address,
           topicId,
           amount,
-          signature: [sig.r, sig.s]
+          signature
         })
       })
 
       const voteData = await voteResponse.json()
-
       if (!voteResponse.ok) {
         throw new Error(voteData.error || 'Vote failed')
       }
 
-      // 5. Return txHash
       return voteData.txHash
 
     } finally {
