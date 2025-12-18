@@ -6,12 +6,21 @@ import { SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointVotes'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { pubKeyX, pubKeyY, signer, expiry, signature } = body
+    const {
+      pubKeyX,
+      pubKeyY,
+      signer,
+      expiry,
+      authenticatorData,  // hex string
+      clientDataJSON,     // raw JSON string
+      r,                  // hex string
+      s                   // hex string
+    } = body
 
     // Validate input
-    if (!pubKeyX || !pubKeyY || !signer || !expiry || !signature) {
+    if (!pubKeyX || !pubKeyY || !signer || !expiry || !authenticatorData || !clientDataJSON || !r || !s) {
       return NextResponse.json(
-        { error: 'Missing required fields: pubKeyX, pubKeyY, signer, expiry, signature' },
+        { error: 'Missing required fields' },
         { status: 400 }
       )
     }
@@ -34,12 +43,24 @@ export async function POST(request: NextRequest) {
       wallet
     )
 
+    console.log('Calling authorizeSigner with:')
+    console.log('  pubKey:', [pubKeyX, pubKeyY])
+    console.log('  signer:', signer)
+    console.log('  expiry:', expiry)
+    console.log('  authenticatorData:', authenticatorData.slice(0, 40) + '...')
+    console.log('  clientDataJSON:', clientDataJSON.slice(0, 60) + '...')
+    console.log('  r:', r)
+    console.log('  s:', s)
+
     // Call authorizeSigner on contract
     const tx = await contract.authorizeSigner(
       [pubKeyX, pubKeyY],
       signer,
       expiry,
-      signature
+      authenticatorData,
+      clientDataJSON,
+      r,
+      s
     )
 
     // Wait for transaction to be mined
