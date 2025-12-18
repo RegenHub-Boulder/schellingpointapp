@@ -3,121 +3,39 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, SlidersHorizontal, Heart } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Heart, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { SessionCard } from '@/components/sessions/session-card'
 import { cn } from '@/lib/utils'
-import { SessionTrack } from '@/types'
+import { useSessions, Session } from '@/hooks/use-sessions'
 
-// Mock data with tracks
-const mockSessions = [
-  {
-    id: '1',
-    title: 'Building DAOs That Actually Work',
-    description: 'We\'ll explore practical governance frameworks that have worked for DAOs at different scales. I\'ll share case studies from MakerDAO, Gitcoin, and smaller community DAOs.',
-    format: 'talk' as const,
-    duration: 60,
-    host: { name: 'Alice Chen' },
-    tags: ['Governance', 'DAOs'],
-    track: 'governance' as SessionTrack,
-    votes: 127,
-    userVotes: 3,
-    isFavorited: true,
-  },
-  {
-    id: '2',
-    title: 'Zero-Knowledge Proofs Workshop',
-    description: 'Hands-on workshop building your first ZK circuit. We\'ll cover the basics of ZK proofs and build a simple proof of concept together.',
-    format: 'workshop' as const,
-    duration: 90,
-    host: { name: 'Bob Smith' },
-    tags: ['Cryptography', 'Technical'],
-    track: 'technical' as SessionTrack,
-    votes: 98,
-    userVotes: 1,
-    isFavorited: false,
-  },
-  {
-    id: '3',
-    title: 'The Future of Regenerative Finance',
-    description: 'A facilitated discussion on how ReFi can scale beyond carbon credits to address broader environmental and social challenges.',
-    format: 'discussion' as const,
-    duration: 60,
-    host: { name: 'Carol Williams' },
-    tags: ['ReFi', 'Sustainability'],
-    track: 'sustainability' as SessionTrack,
-    votes: 84,
-    userVotes: 2,
-    isFavorited: true,
-  },
-  {
-    id: '4',
-    title: 'MEV Deep Dive',
-    description: 'Understanding Maximal Extractable Value, its impact on users, and the latest solutions being developed to mitigate its effects.',
-    format: 'talk' as const,
-    duration: 60,
-    host: { name: 'David Lee' },
-    tags: ['DeFi', 'Security'],
-    track: 'defi' as SessionTrack,
-    votes: 76,
-    userVotes: 0,
-    isFavorited: false,
-  },
-  {
-    id: '5',
-    title: 'Layer 2 Scaling Solutions Panel',
-    description: 'Representatives from various L2 solutions discuss trade-offs, roadmaps, and the future of Ethereum scaling.',
-    format: 'panel' as const,
-    duration: 90,
-    host: { name: 'Eve Martinez' },
-    tags: ['Layer 2', 'Scaling'],
-    track: 'technical' as SessionTrack,
-    votes: 89,
-    userVotes: 0,
-    isFavorited: false,
-  },
-  {
-    id: '6',
-    title: 'Smart Contract Security Demo',
-    description: 'Live demonstration of common smart contract vulnerabilities and how to audit for them.',
-    format: 'demo' as const,
-    duration: 60,
-    host: { name: 'Frank Johnson' },
-    tags: ['Security', 'Technical'],
-    track: 'technical' as SessionTrack,
-    votes: 52,
-    userVotes: 0,
-    isFavorited: false,
-  },
-  {
-    id: '7',
-    title: 'NFT Art Showcase & Discussion',
-    description: 'Explore the intersection of art and blockchain. Featured artists will present their work and discuss the creative process.',
-    format: 'discussion' as const,
-    duration: 60,
-    host: { name: 'Grace Liu' },
-    tags: ['NFTs', 'Art'],
-    track: 'creative' as SessionTrack,
-    votes: 45,
-    userVotes: 0,
-    isFavorited: false,
-  },
-  {
-    id: '8',
-    title: 'Community Building in Web3',
-    description: 'How to build and nurture thriving communities around your protocol or DAO.',
-    format: 'workshop' as const,
-    duration: 90,
-    host: { name: 'Henry Park' },
-    tags: ['Community', 'Growth'],
-    track: 'social' as SessionTrack,
-    votes: 67,
-    userVotes: 0,
-    isFavorited: false,
-  },
-]
+// Transform API session to UI format
+function transformSession(session: Session) {
+  const primaryHost = session.hosts?.find(h => h.isPrimary) || session.hosts?.[0]
+  return {
+    id: session.id,
+    title: session.title,
+    description: session.description || '',
+    format: session.format as 'talk' | 'workshop' | 'discussion' | 'panel' | 'demo',
+    duration: session.duration,
+    host: {
+      name: primaryHost?.name || 'Unknown Host',
+      avatar: primaryHost?.avatar || undefined,
+    },
+    tags: session.topicTags || [],
+    votes: session.preVoteStats?.totalVotes || 0,
+    userVotes: 0, // Will be populated from user's votes
+    isFavorited: false, // Will be managed locally for now
+    venue: session.venue ? {
+      name: session.venue.name,
+      capacity: session.venue.capacity,
+      features: session.venue.features,
+    } : undefined,
+    scheduledTime: session.timeSlot ? new Date(session.timeSlot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
+  }
+}
 
 const formats = [
   { value: 'all', label: 'All Formats' },
@@ -128,16 +46,6 @@ const formats = [
   { value: 'demo', label: 'Demo' },
 ]
 
-const tracks = [
-  { value: 'all', label: 'All Tracks' },
-  { value: 'governance', label: 'Governance', color: 'bg-blue-500' },
-  { value: 'technical', label: 'Technical', color: 'bg-purple-500' },
-  { value: 'defi', label: 'DeFi', color: 'bg-green-500' },
-  { value: 'social', label: 'Social', color: 'bg-orange-500' },
-  { value: 'creative', label: 'Creative', color: 'bg-pink-500' },
-  { value: 'sustainability', label: 'Sustainability', color: 'bg-emerald-500' },
-]
-
 const sortOptions = [
   { value: 'votes', label: 'Most Voted' },
   { value: 'recent', label: 'Recently Added' },
@@ -146,30 +54,46 @@ const sortOptions = [
 
 export default function SessionsPage() {
   const router = useRouter()
-  const [sessions, setSessions] = React.useState(mockSessions)
+
+  // Fetch sessions with approved status (for public voting)
+  const { sessions: apiSessions, loading, error } = useSessions({ status: 'approved' })
+
+  // Transform API sessions and add local state for votes/favorites
+  const [localState, setLocalState] = React.useState<Record<string, { userVotes: number; isFavorited: boolean }>>({})
+
+  const sessions = React.useMemo(() => {
+    return apiSessions.map(session => {
+      const transformed = transformSession(session)
+      const state = localState[session.id] || { userVotes: 0, isFavorited: false }
+      return { ...transformed, ...state }
+    })
+  }, [apiSessions, localState])
+
   const [search, setSearch] = React.useState('')
   const [format, setFormat] = React.useState('all')
-  const [track, setTrack] = React.useState('all')
   const [sort, setSort] = React.useState('votes')
   const [showFilters, setShowFilters] = React.useState(false)
 
-  // Mock user credits
+  // Mock user credits (will be replaced with real data later)
   const totalCredits = 100
   const spentCredits = sessions.reduce((sum, s) => sum + (s.userVotes * s.userVotes), 0)
   const remainingCredits = totalCredits - spentCredits
 
   const handleVote = (sessionId: string, votes: number) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === sessionId ? { ...s, userVotes: votes } : s))
-    )
+    setLocalState(prev => ({
+      ...prev,
+      [sessionId]: { ...prev[sessionId], userVotes: votes, isFavorited: prev[sessionId]?.isFavorited || false }
+    }))
   }
 
   const handleToggleFavorite = (sessionId: string) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === sessionId ? { ...s, isFavorited: !s.isFavorited } : s
-      )
-    )
+    setLocalState(prev => ({
+      ...prev,
+      [sessionId]: {
+        userVotes: prev[sessionId]?.userVotes || 0,
+        isFavorited: !prev[sessionId]?.isFavorited
+      }
+    }))
   }
 
   // Filter and sort sessions
@@ -181,9 +105,7 @@ export default function SessionsPage() {
       if (format !== 'all' && s.format !== format) {
         return false
       }
-      if (track !== 'all' && s.track !== track) {
-        return false
-      }
+      // Track filtering removed - tracks not in current data model
       return true
     })
     .sort((a, b) => {
@@ -193,6 +115,25 @@ export default function SessionsPage() {
     })
 
   const favoriteCount = sessions.filter((s) => s.isFavorited).length
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">Failed to load sessions: {error}</p>
+        <Button onClick={() => window.location.reload()}>Try again</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -253,32 +194,6 @@ export default function SessionsPage() {
 
         {showFilters && (
           <div className="flex flex-wrap gap-4 p-4 rounded-lg border bg-muted/30 animate-slide-down">
-            {/* Track Filter */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Track
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {tracks.map((t) => (
-                  <button
-                    key={t.value}
-                    onClick={() => setTrack(t.value)}
-                    className={cn(
-                      'px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5',
-                      track === t.value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background border hover:bg-accent'
-                    )}
-                  >
-                    {t.color && (
-                      <span className={cn('w-2 h-2 rounded-full', t.color)} />
-                    )}
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Format Filter */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
@@ -350,7 +265,6 @@ export default function SessionsPage() {
             onClick={() => {
               setSearch('')
               setFormat('all')
-              setTrack('all')
             }}
           >
             Clear filters
