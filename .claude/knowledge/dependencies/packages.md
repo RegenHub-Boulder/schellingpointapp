@@ -22,8 +22,27 @@
   - Contract interaction
   - Wallet creation
   - Message signing
-- **@simplewebauthn/browser** - WebAuthn client utilities
-- **cbor-web** - CBOR decoding for WebAuthn attestation parsing
+- **@simplewebauthn/browser ^13.2.2** - WebAuthn client utilities
+- **cbor-web ^10.0.11** - CBOR decoding for WebAuthn attestation parsing
+  - Custom `extractPublicKey()` in `src/lib/webauthn.ts` handles P-256 key extraction
+
+## Authentication Strategy: No JWT
+
+**Important**: The project deliberately avoids JWT/session middleware:
+- No jsonwebtoken or jwt-decode libraries
+- No express-session or next-auth
+- Authentication is passkey-based with ephemeral signers
+
+State is managed entirely client-side via localStorage:
+- Passkey info: `{ credentialId, userId, pubKeyX, pubKeyY }`
+- Session key: `{ privateKey, address, expiry }`
+- No HTTP cookies, no auth headers, no middleware
+
+**Design principle for future login flow**:
+- Follow same localStorage pattern for consistency
+- Use existing Gate 1 (database passkey validation)
+- Store session data in localStorage matching ephemeral wallet pattern
+- NO jwt library needed - continue using localStorage + contract state
 
 ## Testing
 - **@playwright/test ^1.57.0** - E2E testing

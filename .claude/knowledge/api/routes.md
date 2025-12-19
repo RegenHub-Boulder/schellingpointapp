@@ -1,32 +1,50 @@
 # API Routes
 
+## API Route Security Pattern
+
+All routes follow a consistent multi-gate validation pattern:
+
+```
+1. Input validation (required fields presence)
+2. Gate 1: getUserByPasskey() validates passkey registered in Supabase
+   - Returns User | null
+   - If invalid: return 401 Unauthorized
+3. Gate 2 (optional): On-chain state validation (only for /api/vote)
+   - Check signers(identityHash, signer) for valid expiry
+   - If invalid: return 403 Forbidden
+4. Contract interaction via ethers.js
+5. Success response with txHash or data
+```
+
+Error handling: Console.error with detailed logging, return error message in response.
+
 ## Implemented Routes (Passkey Auth System)
 
 ### POST /api/register
 Registers a new user with passkey credentials.
 - **Input**: `{ code, pubKeyX, pubKeyY }`
-- **Process**: Validates invite code, stores passkey, burns code
-- **Returns**: `{ success, userId }`
+- **Process**: Gets user by invite code, calls `registerPasskey()` which sets pubkey_x, pubkey_y, burns code
+- **Returns**: `{ success: true, userId }`
 
 ### POST /api/authorize
 Authorizes an ephemeral signer for a passkey.
-- **Input**: `{ pubKeyX, pubKeyY, signer, expiry, signature }`
-- **Gate 1**: Check passkey registered in database
-- **Process**: Calls contract.authorizeSigner()
-- **Returns**: `{ success, txHash }`
+- **Input**: `{ pubKeyX, pubKeyY, signer, expiry, authenticatorData, clientDataJSON, r, s }`
+- **Gate 1**: `getUserByPasskey` validates passkey in DB
+- **Process**: Calls `contract.authorizeSigner()`, verifies authorization readable on-chain (RPC lag handling)
+- **Returns**: `{ success: true, txHash }`
 
 ### POST /api/vote
 Casts a vote using an authorized signer.
 - **Input**: `{ pubKeyX, pubKeyY, signer, topicId, amount, signature }`
-- **Gate 1**: Check passkey registered in database
-- **Gate 2**: Check signer authorized on-chain with valid expiry
-- **Process**: Calls contract.vote()
-- **Returns**: `{ success, txHash }`
+- **Gate 1**: `getUserByPasskey` validates passkey in DB
+- **Gate 2**: `contract.signers()` checks signer authorized with valid expiry
+- **Process**: Calls `contract.vote()`
+- **Returns**: `{ success: true, txHash }`
 
 ### GET /api/nonce
 Gets current nonce for signing.
 - **Query**: `?pubKeyX=...&pubKeyY=...`
-- **Process**: Read-only contract call
+- **Process**: Read-only contract call via `contract.getNonce()`
 - **Returns**: Current nonce for vote signature creation
 
 ## Database Service Layer

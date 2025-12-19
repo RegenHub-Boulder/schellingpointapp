@@ -74,6 +74,39 @@ src/app/
 - Info boxes in muted background
 - Loading states with Button loading prop
 
+## Auth Component Flow
+
+### AuthModal (src/components/auth/auth-modal.tsx)
+- **Steps**: 'choose' → 'email'/'wallet' → 'email-sent' → 'success'
+- Currently simulated (email/wallet flows are UI demos with timeouts)
+- `onComplete` callback triggers profile setup
+- **Props**: open, onOpenChange, onComplete, eventName
+
+### ProfileSetup (src/components/auth/profile-setup.tsx)
+- Multi-step form (3 steps) after auth
+- **Step 1**: Avatar, displayName, bio, interests (up to 5)
+- **Step 2**: Email, location, social links (all optional)
+- **Step 3**: BurnerSetup component
+- Returns `ProfileData` interface on completion
+- Modal blocks background interaction (`showClose={false}`)
+
+### OnboardingTutorial (src/components/auth/onboarding-tutorial.tsx)
+- Tutorial flow after profile setup
+- `onComplete` navigates to `/event/sessions`
+
+### Landing Page Auth Flow (src/app/page.tsx)
+- Manages auth state machine: 'none' | 'auth' | 'profile' | 'onboarding'
+- Shows AuthModal when `authStep === 'auth'`
+- Chains: AuthModal → ProfileSetup → OnboardingTutorial → /event/sessions
+
+### Event Layout (src/app/event/layout.tsx)
+- Has Navbar with user name and credits
+- Shows event status and tabs
+- Currently uses mock data (no context/state provider)
+- `onSignOut` callback on navbar not yet wired
+
+**Note**: NO context providers or global auth state - everything is local component state
+
 ## Test Selectors
 Uses data-testid attributes throughout:
 - `auth-modal`, `email-auth-btn`

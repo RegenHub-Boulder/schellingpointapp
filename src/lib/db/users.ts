@@ -5,11 +5,22 @@ export interface User {
   id: string
   email: string
   invite_code: string | null
-  pubkey_x: string | null
-  pubkey_y: string | null
-  credential_id: string | null
   payout_address: string | null
   display_name: string | null
+}
+
+export interface UserPasskey {
+  id: string
+  user_id: string
+  pubkey_x: string
+  pubkey_y: string
+  credential_id: string
+  created_at: string
+}
+
+export interface UserWithPasskey {
+  user: User
+  passkey: UserPasskey
 }
 
 // Get Supabase client (uses env vars)
@@ -35,15 +46,17 @@ export async function getUserByInviteCode(code: string): Promise<User | null> {
 
 export async function getUserByPasskey(pubkeyX: string, pubkeyY: string): Promise<User | null> {
   const supabase = getSupabase()
+
+  // Look up passkey in user_passkeys table, join to users
   const { data, error } = await supabase
-    .from('users')
-    .select('*')
+    .from('user_passkeys')
+    .select('user_id, users(*)')
     .eq('pubkey_x', pubkeyX)
     .eq('pubkey_y', pubkeyY)
     .single()
 
-  if (error || !data) return null
-  return data as User
+  if (error || !data || !data.users) return null
+  return data.users as unknown as User
 }
 
 export async function registerPasskey(
@@ -53,27 +66,63 @@ export async function registerPasskey(
   credentialId: string
 ): Promise<boolean> {
   const supabase = getSupabase()
-  const { error } = await supabase
-    .from('users')
-    .update({
+
+  // Insert into user_passkeys table (supports multiple passkeys per user)
+  const { error: passkeyError } = await supabase
+    .from('user_passkeys')
+    .insert({
+      user_id: userId,
       pubkey_x: pubkeyX,
       pubkey_y: pubkeyY,
-      credential_id: credentialId,
-      invite_code: null  // burn the invite code
+      credential_id: credentialId
     })
+
+  if (passkeyError) return false
+
+  // Burn the invite code
+  const { error: userError } = await supabase
+    .from('users')
+    .update({ invite_code: null })
     .eq('id', userId)
 
-  return !error
+  return !userError
 }
 
 export async function getUserByCredentialId(credentialId: string): Promise<User | null> {
   const supabase = getSupabase()
+
+  // Look up credential in user_passkeys table, join to users
   const { data, error } = await supabase
-    .from('users')
-    .select('*')
+    .from('user_passkeys')
+    .select('user_id, users(*)')
     .eq('credential_id', credentialId)
     .single()
 
-  if (error || !data) return null
-  return data as User
+  if (error || !data || !data.users) return null
+  return data.users as unknown as User
+}
+
+// Get user and passkey data together (for login/lookup flows)
+export async function getUserWithPasskeyByCredentialId(credentialId: string): Promise<UserWithPasskey | null> {
+  const supabase = getSupabase()
+
+  const { data, error } = await supabase
+    .from('user_passkeys')
+    .select('*, users(*)')
+    .eq('credential_id', credentialId)
+    .single()
+
+  if (error || !data || !data.users) return null
+
+  return {
+    user: data.users as unknown as User,
+    passkey: {
+      id: data.id,
+      user_id: data.user_id,
+      pubkey_x: data.pubkey_x,
+      pubkey_y: data.pubkey_y,
+      credential_id: data.credential_id,
+      created_at: data.created_at
+    }
+  }
 }

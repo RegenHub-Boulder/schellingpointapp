@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserByCredentialId } from '@/lib/db/users'
+import { getUserWithPasskeyByCredentialId } from '@/lib/db/users'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,21 +13,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const user = await getUserByCredentialId(credentialId)
-    if (!user) {
+    const result = await getUserWithPasskeyByCredentialId(credentialId)
+    if (!result) {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
       )
     }
 
-    // Return user info needed to restore passkeyInfo
+    // Return user and passkey info needed to restore passkeyInfo
     return NextResponse.json({
       success: true,
-      userId: user.id,
-      pubKeyX: user.pubkey_x,
-      pubKeyY: user.pubkey_y,
-      credentialId: user.credential_id
+      userId: result.user.id,
+      pubKeyX: result.passkey.pubkey_x,
+      pubKeyY: result.passkey.pubkey_y,
+      credentialId: result.passkey.credential_id
     })
 
   } catch (error: unknown) {
