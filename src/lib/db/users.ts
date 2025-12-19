@@ -1,22 +1,9 @@
 // Service layer for users table - abstract DB operations for testability
 import { createClient } from '@supabase/supabase-js'
+import { Database, Tables } from '@/types/supabase'
 
-export interface User {
-  id: string
-  email: string
-  invite_code: string | null
-  payout_address: string | null
-  display_name: string | null
-}
-
-export interface UserPasskey {
-  id: string
-  user_id: string
-  pubkey_x: string
-  pubkey_y: string
-  credential_id: string
-  created_at: string
-}
+export type User = Tables<'users'>
+export type UserPasskey = Tables<'user_passkeys'>
 
 export interface UserWithPasskey {
   user: User
@@ -25,7 +12,7 @@ export interface UserWithPasskey {
 
 // Get Supabase client (uses env vars)
 function getSupabase() {
-  return createClient(
+  return createClient<Database>(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
@@ -41,7 +28,7 @@ export async function getUserByInviteCode(code: string): Promise<User | null> {
     .single()
 
   if (error || !data) return null
-  return data as User
+  return data
 }
 
 export async function getUserByPasskey(pubkeyX: string, pubkeyY: string): Promise<User | null> {
@@ -56,7 +43,7 @@ export async function getUserByPasskey(pubkeyX: string, pubkeyY: string): Promis
     .single()
 
   if (error || !data || !data.users) return null
-  return data.users as unknown as User
+  return data.users
 }
 
 export async function registerPasskey(
@@ -99,7 +86,7 @@ export async function getUserByCredentialId(credentialId: string): Promise<User 
     .single()
 
   if (error || !data || !data.users) return null
-  return data.users as unknown as User
+  return data.users
 }
 
 // Get user and passkey data together (for login/lookup flows)
@@ -115,14 +102,7 @@ export async function getUserWithPasskeyByCredentialId(credentialId: string): Pr
   if (error || !data || !data.users) return null
 
   return {
-    user: data.users as unknown as User,
-    passkey: {
-      id: data.id,
-      user_id: data.user_id,
-      pubkey_x: data.pubkey_x,
-      pubkey_y: data.pubkey_y,
-      credential_id: data.credential_id,
-      created_at: data.created_at
-    }
+    user: data.users,
+    passkey: data
   }
 }
