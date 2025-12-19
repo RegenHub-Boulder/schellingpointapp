@@ -48,12 +48,33 @@ export default function LoginPage() {
     }
   }
 
+  // Step tracking - 2 steps if no local passkey (need to discover), 1 step if has local
+  const totalSteps = hasLocalPasskey ? 1 : 2
+  const getCurrentStep = () => {
+    if (status === 'idle') return 0
+    if (status === 'recovering') return 1 // Step 1: passkey discovery
+    if (status === 'authorizing') return hasLocalPasskey ? 1 : 2 // Step 2 if recovering, Step 1 if has local
+    if (status === 'logging-in' || status === 'success') return totalSteps
+    return 0
+  }
+  const currentStep = getCurrentStep()
+
   const getStatusMessage = () => {
-    if (status === 'authorizing') return 'Authenticating...'
+    if (status === 'recovering') return 'Selecting passkey...'
+    if (status === 'authorizing') return 'Authorizing...'
     if (status === 'logging-in') return 'Logging in...'
     if (status === 'success') return 'Success!'
     if (hasLocalPasskey) return 'Login with Face ID / Touch ID'
     return 'Sign in with Passkey'
+  }
+
+  const getStepDescription = () => {
+    if (status === 'recovering') return 'Select your passkey'
+    if (status === 'authorizing') {
+      return hasLocalPasskey ? 'Authorize your session' : 'Authorize your session'
+    }
+    if (status === 'logging-in') return 'Completing login...'
+    return null
   }
 
   const getDescription = () => {
@@ -102,14 +123,49 @@ export default function LoginPage() {
 
             {status !== 'success' && status !== 'error' && (
               <>
-                <div className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
-                  <p>
-                    {hasLocalPasskey
-                      ? 'Use Face ID / Touch ID to verify your identity.'
-                      : 'Your device will show available passkeys for this site.'
-                    }
-                  </p>
-                </div>
+                {/* Step indicator */}
+                {currentStep > 0 && totalSteps > 1 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-center gap-2">
+                      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
+                        <div key={step} className="flex items-center gap-2">
+                          <div className={`
+                            w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
+                            ${step < currentStep ? 'bg-green-600 text-white' : ''}
+                            ${step === currentStep ? 'bg-primary text-primary-foreground animate-pulse' : ''}
+                            ${step > currentStep ? 'bg-muted text-muted-foreground' : ''}
+                          `}>
+                            {step < currentStep ? '✓' : step}
+                          </div>
+                          {step < totalSteps && (
+                            <div className={`w-8 h-0.5 ${step < currentStep ? 'bg-green-600' : 'bg-muted'}`} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-sm text-center text-muted-foreground">
+                      {getStepDescription()}
+                    </p>
+                  </div>
+                )}
+
+                {/* Simple description for single-step flow */}
+                {currentStep > 0 && totalSteps === 1 && getStepDescription() && (
+                  <div className="rounded-lg bg-primary/10 p-4 text-sm text-center text-primary">
+                    {getStepDescription()}
+                  </div>
+                )}
+
+                {currentStep === 0 && (
+                  <div className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
+                    <p>
+                      {hasLocalPasskey
+                        ? 'Use Face ID / Touch ID to verify your identity.'
+                        : 'Your device will show available passkeys for this site.'
+                      }
+                    </p>
+                  </div>
+                )}
 
                 <Button
                   size="lg"

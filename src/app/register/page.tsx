@@ -134,12 +134,29 @@ function RegisterContent() {
   const displayError = error || authError
   const isLoading = isCreatingPasskey || isAuthLoading
 
+  // Step tracking for UI
+  const getCurrentStep = () => {
+    if (isCreatingPasskey) return 1
+    if (status === 'authorizing') return 2
+    if (status === 'logging-in' || status === 'success') return 2
+    return 0
+  }
+  const currentStep = getCurrentStep()
+  const totalSteps = 2
+
   const getStatusMessage = () => {
     if (isCreatingPasskey) return 'Creating passkey...'
     if (status === 'authorizing') return 'Authorizing session...'
     if (status === 'logging-in') return 'Logging in...'
     if (status === 'success') return 'Success!'
     return 'Create Account with Face ID / Touch ID'
+  }
+
+  const getStepDescription = () => {
+    if (isCreatingPasskey) return 'Create your passkey with Face ID / Touch ID'
+    if (status === 'authorizing') return 'Authorize your session for voting'
+    if (status === 'logging-in') return 'Completing setup...'
+    return null
   }
 
   return (
@@ -173,7 +190,33 @@ function RegisterContent() {
               </div>
             )}
 
-            {inviteCode && status !== 'success' && (
+            {/* Step indicator */}
+            {currentStep > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-center gap-2">
+                  {[1, 2].map((step) => (
+                    <div key={step} className="flex items-center gap-2">
+                      <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
+                        ${step < currentStep ? 'bg-green-600 text-white' : ''}
+                        ${step === currentStep ? 'bg-primary text-primary-foreground animate-pulse' : ''}
+                        ${step > currentStep ? 'bg-muted text-muted-foreground' : ''}
+                      `}>
+                        {step < currentStep ? '✓' : step}
+                      </div>
+                      {step < totalSteps && (
+                        <div className={`w-8 h-0.5 ${step < currentStep ? 'bg-green-600' : 'bg-muted'}`} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-center text-muted-foreground">
+                  {getStepDescription()}
+                </p>
+              </div>
+            )}
+
+            {inviteCode && status !== 'success' && currentStep === 0 && (
               <div className="rounded-lg bg-muted p-4 text-sm">
                 <div className="font-medium mb-1">Invite Code</div>
                 <div className="font-mono text-muted-foreground">{inviteCode}</div>

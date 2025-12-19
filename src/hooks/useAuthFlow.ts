@@ -25,7 +25,7 @@ interface SessionKey {
   expiry: number
 }
 
-export type AuthFlowStatus = 'idle' | 'authorizing' | 'logging-in' | 'success' | 'error'
+export type AuthFlowStatus = 'idle' | 'recovering' | 'authorizing' | 'logging-in' | 'success' | 'error'
 
 export function useAuthFlow() {
   const [status, setStatus] = useState<AuthFlowStatus>('idle')
@@ -271,11 +271,12 @@ export function useAuthFlow() {
       if (stored) {
         passkeyInfo = JSON.parse(stored)
       } else {
-        // Recover via discoverable credentials
-        setStatus('authorizing')
+        // Recover via discoverable credentials (Step 1)
+        setStatus('recovering')
         passkeyInfo = await recoverPasskeyInfo()
       }
 
+      // Authorize + login (Step 2)
       await completeAuthFlow(passkeyInfo)
     } catch (err) {
       setStatus('error')
@@ -299,6 +300,6 @@ export function useAuthFlow() {
     completeAuthFlow,
     loginFlow,
     reset,
-    isLoading: status === 'authorizing' || status === 'logging-in'
+    isLoading: status === 'recovering' || status === 'authorizing' || status === 'logging-in'
   }
 }
