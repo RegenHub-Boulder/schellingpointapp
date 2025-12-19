@@ -5,14 +5,24 @@
 -- USERS
 -- =============================================================================
 
--- Note: Using sample passkey coordinates for seed data
+INSERT INTO users (id, email, display_name, bio, topics) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'alice@example.com', 'Alice', 'Event organizer and DAO enthusiast', ARRAY['governance', 'defi', 'community']),
+  ('00000000-0000-0000-0000-000000000002', 'bob@example.com', 'Bob', 'Smart contract developer', ARRAY['solidity', 'security', 'tooling']),
+  ('00000000-0000-0000-0000-000000000003', 'carol@example.com', 'Carol', 'Product designer focused on web3 UX', ARRAY['design', 'ux', 'onboarding']),
+  ('00000000-0000-0000-0000-000000000004', 'dave@example.com', 'Dave', 'Research scientist in cryptography', ARRAY['cryptography', 'zk', 'privacy']),
+  ('00000000-0000-0000-0000-000000000005', 'eve@example.com', 'Eve', 'Community builder and educator', ARRAY['education', 'community', 'onboarding']);
+
+-- =============================================================================
+-- USER PASSKEYS (sample passkey coordinates for seed data)
 -- In production, these would be generated from actual WebAuthn registration
-INSERT INTO users (id, email, display_name, bio, topics, pubkey_x, pubkey_y) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'alice@example.com', 'Alice', 'Event organizer and DAO enthusiast', ARRAY['governance', 'defi', 'community'], '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b', '0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c'),
-  ('00000000-0000-0000-0000-000000000002', 'bob@example.com', 'Bob', 'Smart contract developer', ARRAY['solidity', 'security', 'tooling'], '0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d', '0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e'),
-  ('00000000-0000-0000-0000-000000000003', 'carol@example.com', 'Carol', 'Product designer focused on web3 UX', ARRAY['design', 'ux', 'onboarding'], '0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f', '0x6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a'),
-  ('00000000-0000-0000-0000-000000000004', 'dave@example.com', 'Dave', 'Research scientist in cryptography', ARRAY['cryptography', 'zk', 'privacy'], '0x7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b', '0x8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c'),
-  ('00000000-0000-0000-0000-000000000005', 'eve@example.com', 'Eve', 'Community builder and educator', ARRAY['education', 'community', 'onboarding'], '0x9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d', '0x0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e');
+-- =============================================================================
+
+INSERT INTO user_passkeys (user_id, pubkey_x, pubkey_y, credential_id) VALUES
+  ('00000000-0000-0000-0000-000000000001', '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b', '0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c', 'seed-credential-alice'),
+  ('00000000-0000-0000-0000-000000000002', '0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d', '0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e', 'seed-credential-bob'),
+  ('00000000-0000-0000-0000-000000000003', '0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f', '0x6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a', 'seed-credential-carol'),
+  ('00000000-0000-0000-0000-000000000004', '0x7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b', '0x8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c', 'seed-credential-dave'),
+  ('00000000-0000-0000-0000-000000000005', '0x9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d', '0x0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e', 'seed-credential-eve');
 
 -- =============================================================================
 -- EVENTS
