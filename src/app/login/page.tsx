@@ -16,9 +16,15 @@ export default function LoginPage() {
   const { login, isLoggedIn, user } = useAuth()
   const { hasPasskey, hasValidSession, authorizeSession, isAuthorizing } = useVoting()
 
-  const [status, setStatus] = React.useState<LoginStatus>('idle')
+  const [status, setStatus] = React.useState<LoginStatus>('checking')
   const [error, setError] = React.useState<string | null>(null)
   const [needsAuth, setNeedsAuth] = React.useState(false)
+  const [isMounted, setIsMounted] = React.useState(false)
+
+  // Wait for client-side hydration
+  React.useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Check if already logged in
   React.useEffect(() => {
@@ -27,8 +33,10 @@ export default function LoginPage() {
     }
   }, [isLoggedIn, router])
 
-  // Check session status on mount
+  // Check session status after mount (localStorage only available client-side)
   React.useEffect(() => {
+    if (!isMounted) return
+
     if (!hasPasskey()) {
       setError('No passkey found. Please register first.')
       setStatus('error')
@@ -38,7 +46,8 @@ export default function LoginPage() {
     if (!hasValidSession()) {
       setNeedsAuth(true)
     }
-  }, [hasPasskey, hasValidSession])
+    setStatus('idle')
+  }, [isMounted, hasPasskey, hasValidSession])
 
   const handleLogin = async () => {
     setError(null)
@@ -89,7 +98,7 @@ export default function LoginPage() {
     }
   }
 
-  const isLoading = status === 'checking' || status === 'authorizing' || status === 'logging-in' || isAuthorizing
+  const isLoading = !isMounted || status === 'checking' || status === 'authorizing' || status === 'logging-in' || isAuthorizing
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
