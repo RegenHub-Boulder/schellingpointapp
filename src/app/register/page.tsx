@@ -82,7 +82,8 @@ function RegisterContent() {
         body: JSON.stringify({
           code: inviteCode,
           pubKeyX,
-          pubKeyY
+          pubKeyY,
+          credentialId
         })
       })
 

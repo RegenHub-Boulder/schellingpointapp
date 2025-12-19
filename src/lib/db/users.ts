@@ -7,6 +7,7 @@ export interface User {
   invite_code: string | null
   pubkey_x: string | null
   pubkey_y: string | null
+  credential_id: string | null
   payout_address: string | null
   display_name: string | null
 }
@@ -48,7 +49,8 @@ export async function getUserByPasskey(pubkeyX: string, pubkeyY: string): Promis
 export async function registerPasskey(
   userId: string,
   pubkeyX: string,
-  pubkeyY: string
+  pubkeyY: string,
+  credentialId: string
 ): Promise<boolean> {
   const supabase = getSupabase()
   const { error } = await supabase
@@ -56,9 +58,22 @@ export async function registerPasskey(
     .update({
       pubkey_x: pubkeyX,
       pubkey_y: pubkeyY,
+      credential_id: credentialId,
       invite_code: null  // burn the invite code
     })
     .eq('id', userId)
 
   return !error
+}
+
+export async function getUserByCredentialId(credentialId: string): Promise<User | null> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('credential_id', credentialId)
+    .single()
+
+  if (error || !data) return null
+  return data as User
 }

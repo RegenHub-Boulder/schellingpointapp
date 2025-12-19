@@ -8,17 +8,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Container } from '@/components/layout/container'
 import { useAuth } from '@/hooks/useAuth'
 import { useVoting } from '@/hooks/useVoting'
+import { arrayBufferToBase64Url } from '@/lib/webauthn'
 
 type LoginStatus = 'idle' | 'checking' | 'authorizing' | 'logging-in' | 'success' | 'error'
 
 export default function LoginPage() {
   const router = useRouter()
   const { login, isLoggedIn, user } = useAuth()
-  const { hasPasskey, hasValidSession, authorizeSession, isAuthorizing } = useVoting()
+  const { hasValidSession, authorizeSession, isAuthorizing } = useVoting()
 
   const [status, setStatus] = React.useState<LoginStatus>('checking')
   const [error, setError] = React.useState<string | null>(null)
   const [needsAuth, setNeedsAuth] = React.useState(false)
+  const [needsPasskeySelect, setNeedsPasskeySelect] = React.useState(false)
   const [isMounted, setIsMounted] = React.useState(false)
 
   // Wait for client-side hydration
@@ -44,8 +46,10 @@ export default function LoginPage() {
     console.log('Login page check:', { passkeyInfo: !!passkeyInfo, sessionKey: !!sessionKey })
 
     if (!passkeyInfo) {
-      setError('No passkey found. Please register first.')
-      setStatus('error')
+      // No local passkey info - need to use discoverable credentials
+      setNeedsPasskeySelect(true)
+      setNeedsAuth(true)
+      setStatus('idle')
       return
     }
 
@@ -67,10 +71,71 @@ export default function LoginPage() {
     setStatus('idle')
   }, [isMounted])
 
+  // Recover passkey info using discoverable credentials
+  async function recoverPasskeyInfo(): Promise<boolean> {
+    try {
+      // Use discoverable credentials - let user select their passkey
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rpId: window.location.hostname,
+          userVerification: 'required',
+          timeout: 60000
+          // No allowCredentials - this makes it discoverable
+        }
+      }) as PublicKeyCredential
+
+      if (!assertion) {
+        throw new Error('Authentication cancelled')
+      }
+
+      // Get credential ID
+      const credentialId = arrayBufferToBase64Url(assertion.rawId)
+
+      // Look up user by credential ID
+      const lookupResponse = await fetch('/api/auth/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialId })
+      })
+
+      if (!lookupResponse.ok) {
+        const data = await lookupResponse.json()
+        throw new Error(data.error || 'User not found. Please register first.')
+      }
+
+      const userData = await lookupResponse.json()
+
+      // Restore passkeyInfo to localStorage
+      localStorage.setItem('passkeyInfo', JSON.stringify({
+        credentialId: userData.credentialId,
+        userId: userData.userId,
+        pubKeyX: userData.pubKeyX,
+        pubKeyY: userData.pubKeyY
+      }))
+
+      setNeedsPasskeySelect(false)
+      return true
+
+    } catch (err) {
+      console.error('Passkey recovery error:', err)
+      if (err instanceof Error) {
+        throw err
+      }
+      throw new Error('Failed to authenticate with passkey')
+    }
+  }
+
   const handleLogin = async () => {
     setError(null)
 
     try {
+      // Step 0: If no passkeyInfo, recover it first using discoverable credentials
+      if (needsPasskeySelect) {
+        setStatus('authorizing')
+        await recoverPasskeyInfo()
+      }
+
       // Step 1: If no valid session, authorize first (requires Face ID)
       if (!hasValidSession()) {
         setStatus('authorizing')
@@ -110,6 +175,9 @@ export default function LoginPage() {
       case 'success':
         return 'Success! Redirecting...'
       default:
+        if (needsPasskeySelect) {
+          return 'Sign in with Passkey'
+        }
         return needsAuth
           ? 'Login with Face ID / Touch ID'
           : 'Login'
@@ -140,9 +208,11 @@ export default function LoginPage() {
             <CardDescription>
               {status === 'success'
                 ? `Logged in as ${user?.displayName || 'User'}`
-                : needsAuth
-                  ? 'Your session expired. Please authenticate again.'
-                  : 'Continue to Schelling Point'
+                : needsPasskeySelect
+                  ? 'Select your passkey to sign in'
+                  : needsAuth
+                    ? 'Your session expired. Please authenticate again.'
+                    : 'Continue to Schelling Point'
               }
             </CardDescription>
           </CardHeader>
@@ -192,16 +262,14 @@ export default function LoginPage() {
                   Try Again
                 </Button>
 
-                {!hasPasskey() && (
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => router.push('/')}
-                  >
-                    Go to Home
-                  </Button>
-                )}
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => router.push('/')}
+                >
+                  Go to Home
+                </Button>
               </div>
             )}
 

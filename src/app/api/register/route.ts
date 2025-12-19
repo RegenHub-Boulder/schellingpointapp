@@ -4,12 +4,12 @@ import { getUserByInviteCode, registerPasskey } from '@/lib/db/users'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { code, pubKeyX, pubKeyY } = body
+    const { code, pubKeyX, pubKeyY, credentialId } = body
 
     // Validate input
-    if (!code || !pubKeyX || !pubKeyY) {
+    if (!code || !pubKeyX || !pubKeyY || !credentialId) {
       return NextResponse.json(
-        { error: 'Missing required fields: code, pubKeyX, pubKeyY' },
+        { error: 'Missing required fields: code, pubKeyX, pubKeyY, credentialId' },
         { status: 400 }
       )
     }
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Register the passkey
-    const success = await registerPasskey(user.id, pubKeyX, pubKeyY)
+    const success = await registerPasskey(user.id, pubKeyX, pubKeyY, credentialId)
     if (!success) {
       return NextResponse.json(
         { error: 'Failed to register passkey' },
