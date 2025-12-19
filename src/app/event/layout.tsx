@@ -7,7 +7,9 @@ import { TabsNav } from '@/components/layout/tabs-nav'
 import { Container } from '@/components/layout/container'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { Badge } from '@/components/ui/badge'
-import { useEvent, useAuth, useVotes } from '@/hooks'
+import { useEvent } from '@/hooks/use-event'
+import { useVotes } from '@/hooks/use-votes'
+import { useAuth } from '@/hooks/useAuth'
 
 const tabs = [
   {
@@ -101,19 +103,26 @@ export default function EventLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Fetch event data and user info
+  // Fetch event data
   const { event, votingConfig, loading: eventLoading, error: eventError } = useEvent()
-  const { user, loading: authLoading, signOut } = useAuth()
   const { balance, loading: votesLoading } = useVotes()
+
+  // Passkey-based auth
+  const { user: authUser, isLoggedIn, isLoading: authLoading, logout } = useAuth()
 
   // Calculate event status
   const eventStatus = getEventStatus(event, votingConfig)
 
   // Get credits from votes balance (or voting config default)
-  const credits = {
+  const credits = isLoggedIn ? {
     total: balance.totalCredits || votingConfig?.preVoteCredits || 100,
     spent: balance.creditsSpent || 0,
-  }
+  } : undefined
+
+  // User info for navbar
+  const user = isLoggedIn && authUser ? {
+    name: authUser.displayName || authUser.email || 'User',
+  } : undefined
 
   const statusLabels = {
     proposals_open: 'Proposals Open',
@@ -163,9 +172,9 @@ export default function EventLayout({
     <div className="min-h-screen flex flex-col">
       <Navbar
         eventName={event?.name || 'Event'}
-        user={user ? { name: user.email || 'User' } : undefined}
+        user={user}
         credits={credits}
-        onSignOut={signOut}
+        onSignOut={logout}
       />
 
       {/* Event Status Banner */}
@@ -183,9 +192,11 @@ export default function EventLayout({
               )}
             </div>
 
-            <div className="sm:hidden">
-              <CreditBar total={credits.total} spent={credits.spent} />
-            </div>
+            {credits && (
+              <div className="sm:hidden">
+                <CreditBar total={credits.total} spent={credits.spent} />
+              </div>
+            )}
           </div>
         </Container>
       </div>
