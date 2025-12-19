@@ -3,16 +3,19 @@
 import * as React from 'react'
 import { Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Fingerprint } from 'lucide-react'
+import { Fingerprint, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Container } from '@/components/layout/container'
 import { extractPublicKey, arrayBufferToBase64Url } from '@/lib/webauthn'
+import { useAuthFlow } from '@/hooks/useAuthFlow'
 
 function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [isLoading, setIsLoading] = React.useState(false)
+  const { status, error: authError, completeAuthFlow, isLoading: isAuthLoading } = useAuthFlow()
+
+  const [isCreatingPasskey, setIsCreatingPasskey] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
   const inviteCode = searchParams.get('code')
@@ -23,17 +26,27 @@ function RegisterContent() {
     }
   }, [inviteCode])
 
+  // Redirect on success
+  React.useEffect(() => {
+    if (status === 'success') {
+      const timer = setTimeout(() => {
+        router.push('/event')
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [status, router])
+
   const handleCreatePasskey = async () => {
     if (!inviteCode) {
       setError('No invite code provided')
       return
     }
 
-    setIsLoading(true)
+    setIsCreatingPasskey(true)
     setError(null)
 
     try {
-      // Create WebAuthn passkey
+      // Step 1: Create WebAuthn passkey
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge: new Uint8Array(32), // In production, get this from server
@@ -73,7 +86,7 @@ function RegisterContent() {
       // Store credential ID for later use
       const credentialId = arrayBufferToBase64Url(credential.rawId)
 
-      // Register with backend
+      // Step 2: Register with backend
       const registerResponse = await fetch('/api/register', {
         method: 'POST',
         headers: {
@@ -94,25 +107,39 @@ function RegisterContent() {
       }
 
       // Store passkey info in localStorage
-      localStorage.setItem('passkeyInfo', JSON.stringify({
+      const passkeyInfo = {
         credentialId,
         userId: data.userId,
         pubKeyX,
         pubKeyY
-      }))
+      }
+      localStorage.setItem('passkeyInfo', JSON.stringify(passkeyInfo))
 
-      // Redirect to event page
-      router.push('/event')
+      setIsCreatingPasskey(false)
+
+      // Step 3: Complete auth flow (authorize signer + get JWT)
+      await completeAuthFlow(passkeyInfo)
+
     } catch (err) {
       console.error('Registration error:', err)
+      setIsCreatingPasskey(false)
       if (err instanceof Error) {
         setError(err.message)
       } else {
         setError('Failed to create account. Please try again.')
       }
-    } finally {
-      setIsLoading(false)
     }
+  }
+
+  const displayError = error || authError
+  const isLoading = isCreatingPasskey || isAuthLoading
+
+  const getStatusMessage = () => {
+    if (isCreatingPasskey) return 'Creating passkey...'
+    if (status === 'authorizing') return 'Authorizing session...'
+    if (status === 'logging-in') return 'Logging in...'
+    if (status === 'success') return 'Success!'
+    return 'Create Account with Face ID / Touch ID'
   }
 
   return (
@@ -122,37 +149,48 @@ function RegisterContent() {
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-primary/10 p-4">
-                <Fingerprint className="h-12 w-12 text-primary" />
+                {status === 'success' ? (
+                  <CheckCircle className="h-12 w-12 text-green-600" />
+                ) : (
+                  <Fingerprint className="h-12 w-12 text-primary" />
+                )}
               </div>
             </div>
-            <CardTitle className="text-2xl">Create Your Account</CardTitle>
+            <CardTitle className="text-2xl">
+              {status === 'success' ? 'Account Created!' : 'Create Your Account'}
+            </CardTitle>
             <CardDescription>
-              Register with Face ID or Touch ID to get started
+              {status === 'success'
+                ? 'Redirecting to event...'
+                : 'Register with Face ID or Touch ID to get started'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {error && (
+            {displayError && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-                {error}
+                {displayError}
               </div>
             )}
 
-            {inviteCode && (
+            {inviteCode && status !== 'success' && (
               <div className="rounded-lg bg-muted p-4 text-sm">
                 <div className="font-medium mb-1">Invite Code</div>
                 <div className="font-mono text-muted-foreground">{inviteCode}</div>
               </div>
             )}
 
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={handleCreatePasskey}
-              loading={isLoading}
-              disabled={!inviteCode || isLoading}
-            >
-              {isLoading ? 'Creating Account...' : 'Create Account with Face ID / Touch ID'}
-            </Button>
+            {status !== 'success' && (
+              <Button
+                size="lg"
+                className="w-full"
+                onClick={handleCreatePasskey}
+                loading={isLoading}
+                disabled={!inviteCode || isLoading}
+              >
+                {getStatusMessage()}
+              </Button>
+            )}
 
             <div className="text-xs text-center text-muted-foreground space-y-2">
               <p>

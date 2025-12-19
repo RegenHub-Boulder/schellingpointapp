@@ -38,7 +38,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [signerExpiry, setSignerExpiry] = React.useState<number | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
 
-  const isLoggedIn = !!user && !!token
+  // "Logged in" = valid JWT + valid signer session
+  const hasValidSigner = React.useMemo(() => {
+    if (!signerExpiry) return false
+    return signerExpiry > Math.floor(Date.now() / 1000)
+  }, [signerExpiry])
+
+  const isLoggedIn = !!user && !!token && hasValidSigner
 
   // Check for existing session on mount
   React.useEffect(() => {
@@ -51,6 +57,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return
         }
 
+        // Check for stored session key (signer info is client-side)
+        const sessionData = localStorage.getItem('sessionKey')
+        let sessionKey: SessionKey | null = null
+        if (sessionData) {
+          try {
+            sessionKey = JSON.parse(sessionData)
+          } catch {
+            // Invalid session data
+          }
+        }
+
         // Validate token with server
         const response = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${storedToken}` }
@@ -60,8 +77,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const data = await response.json()
           setUser(data.user)
           setToken(storedToken)
-          setSignerAddress(data.signerAddress)
-          setSignerExpiry(data.signerExpiry)
+
+          // Set signer info from localStorage (not server)
+          if (sessionKey) {
+            setSignerAddress(sessionKey.address)
+            setSignerExpiry(sessionKey.expiry)
+          }
         } else {
           // Token invalid, clear storage
           localStorage.removeItem('authToken')
