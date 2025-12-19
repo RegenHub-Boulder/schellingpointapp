@@ -1,36 +1,52 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, createHmac } from 'crypto'
 
-// In-memory challenge store (in production, use Redis with TTL)
-const challenges = new Map<string, { challenge: string; expires: number }>()
+const CHALLENGE_SECRET = process.env.JWT_SECRET || 'development-secret-change-in-production'
+const CHALLENGE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+// Signed challenge approach - no server-side storage needed
+// Challenge format: timestamp:nonce:signature
 
 export function generateChallenge(): { challengeId: string; challenge: string } {
-  // Generate random challenge
-  const challenge = randomBytes(32).toString('hex')
-  const challengeId = randomBytes(16).toString('hex')
+  const timestamp = Date.now().toString()
+  const nonce = randomBytes(16).toString('hex')
+  const challenge = `${timestamp}:${nonce}`
 
-  // Store with 5-minute expiry
-  challenges.set(challengeId, {
-    challenge,
-    expires: Date.now() + 5 * 60 * 1000
-  })
+  // Sign the challenge
+  const signature = createHmac('sha256', CHALLENGE_SECRET)
+    .update(challenge)
+    .digest('hex')
 
-  // Clean up expired challenges
-  const now = Date.now()
-  challenges.forEach((data, id) => {
-    if (data.expires < now) {
-      challenges.delete(id)
-    }
-  })
+  const challengeId = `${challenge}:${signature}`
 
-  return { challengeId, challenge }
+  return { challengeId, challenge: nonce }
 }
 
 export function getAndConsumeChallenge(challengeId: string): string | null {
-  const data = challenges.get(challengeId)
-  if (!data || data.expires < Date.now()) {
-    challenges.delete(challengeId)
+  // Parse challengeId: timestamp:nonce:signature
+  const parts = challengeId.split(':')
+  if (parts.length !== 3) {
     return null
   }
-  challenges.delete(challengeId)
-  return data.challenge
+
+  const [timestamp, nonce, signature] = parts
+  const challenge = `${timestamp}:${nonce}`
+
+  // Verify signature
+  const expectedSignature = createHmac('sha256', CHALLENGE_SECRET)
+    .update(challenge)
+    .digest('hex')
+
+  if (signature !== expectedSignature) {
+    console.log('Challenge signature mismatch')
+    return null
+  }
+
+  // Check expiry
+  const challengeTime = parseInt(timestamp, 10)
+  if (Date.now() - challengeTime > CHALLENGE_TTL_MS) {
+    console.log('Challenge expired')
+    return null
+  }
+
+  return nonce
 }
