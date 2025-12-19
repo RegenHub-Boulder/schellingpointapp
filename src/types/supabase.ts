@@ -779,15 +779,12 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string | null
-          credential_id: string | null
           display_name: string | null
           email: string
           ens_address: string | null
           id: string
           invite_code: string | null
           payout_address: string | null
-          pubkey_x: string | null
-          pubkey_y: string | null
           topics: string[] | null
           updated_at: string | null
         }
@@ -795,15 +792,12 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string | null
-          credential_id?: string | null
           display_name?: string | null
           email: string
           ens_address?: string | null
           id?: string
           invite_code?: string | null
           payout_address?: string | null
-          pubkey_x?: string | null
-          pubkey_y?: string | null
           topics?: string[] | null
           updated_at?: string | null
         }
@@ -811,15 +805,12 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string | null
-          credential_id?: string | null
           display_name?: string | null
           email?: string
           ens_address?: string | null
           id?: string
           invite_code?: string | null
           payout_address?: string | null
-          pubkey_x?: string | null
-          pubkey_y?: string | null
           topics?: string[] | null
           updated_at?: string | null
         }
