@@ -196,9 +196,15 @@ export function useVoting() {
         )
       )
 
-      // Sign with session key
-      const wallet = new ethers.Wallet(sessionKey.privateKey)
-      const signature = await wallet.signMessage(ethers.getBytes(messageHash))
+      // Sign with session key (raw sign, NOT signMessage which adds EIP-191 prefix)
+      const signingKey = new ethers.SigningKey(sessionKey.privateKey)
+      const sig = signingKey.sign(messageHash)
+
+      // Format as 65-byte signature: r (32) || s (32) || v (1)
+      // Use hexlify for proper JSON serialization
+      const signature = ethers.hexlify(
+        ethers.concat([sig.r, sig.s, new Uint8Array([sig.v])])
+      )
 
       // Send to API
       const voteResponse = await fetch('/api/vote', {
