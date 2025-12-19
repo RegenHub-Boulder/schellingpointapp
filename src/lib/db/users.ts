@@ -24,9 +24,9 @@ export async function getUserByInviteCode(code: string): Promise<User | null> {
     .from('users')
     .select('*')
     .eq('invite_code', code)
-    .is('pubkey_x', null)  // not already registered
     .single()
 
+  // invite_code is nulled after registration, so if it exists, it's valid
   if (error || !data) return null
   return data
 }
