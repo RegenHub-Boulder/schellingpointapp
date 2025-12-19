@@ -42,42 +42,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Check for existing session on mount
   React.useEffect(() => {
+    async function checkExistingSession() {
+      setIsLoading(true)
+      try {
+        // Check for stored token
+        const storedToken = localStorage.getItem('authToken')
+        if (!storedToken) {
+          return
+        }
+
+        // Validate token with server
+        const response = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${storedToken}` }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setUser(data.user)
+          setToken(storedToken)
+          setSignerAddress(data.signerAddress)
+          setSignerExpiry(data.signerExpiry)
+        } else {
+          // Token invalid, clear storage
+          localStorage.removeItem('authToken')
+        }
+      } catch (error) {
+        console.error('Session check failed:', error)
+        localStorage.removeItem('authToken')
+      } finally {
+        setIsLoading(false)
+      }
+    }
     checkExistingSession()
   }, [])
 
-  async function checkExistingSession() {
-    setIsLoading(true)
-    try {
-      // Check for stored token
-      const storedToken = localStorage.getItem('authToken')
-      if (!storedToken) {
-        return
-      }
-
-      // Validate token with server
-      const response = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${storedToken}` }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.user)
-        setToken(storedToken)
-        setSignerAddress(data.signerAddress)
-        setSignerExpiry(data.signerExpiry)
-      } else {
-        // Token invalid, clear storage
-        localStorage.removeItem('authToken')
-      }
-    } catch (error) {
-      console.error('Session check failed:', error)
-      localStorage.removeItem('authToken')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function login(): Promise<void> {
+  const login = React.useCallback(async (): Promise<void> => {
     // Get passkey and session key from localStorage
     const passkeyData = localStorage.getItem('passkeyInfo')
     const sessionData = localStorage.getItem('sessionKey')
@@ -140,18 +139,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(data.user)
     setSignerAddress(sessionKey.address)
     setSignerExpiry(sessionKey.expiry)
-  }
+  }, [])
 
-  function logout(): void {
+  const logout = React.useCallback((): void => {
     localStorage.removeItem('authToken')
     setToken(null)
     setUser(null)
     setSignerAddress(null)
     setSignerExpiry(null)
     // Note: We keep passkeyInfo and sessionKey for easy re-login
-  }
+  }, [])
 
-  async function refreshUser(): Promise<void> {
+  const refreshUser = React.useCallback(async (): Promise<void> => {
     if (!token) return
 
     const response = await fetch('/api/auth/me', {
@@ -169,9 +168,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         logout()
       }
     }
-  }
+  }, [token, login, logout])
 
-  const value: AuthContextValue = {
+  const value = React.useMemo<AuthContextValue>(() => ({
     user,
     token,
     signerAddress,
@@ -181,7 +180,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     refreshUser
-  }
+  }), [user, token, signerAddress, signerExpiry, isLoading, isLoggedIn, login, logout, refreshUser])
 
   return (
     <AuthContext.Provider value={value}>
