@@ -7,6 +7,7 @@ import { TabsNav } from '@/components/layout/tabs-nav'
 import { Container } from '@/components/layout/container'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { Badge } from '@/components/ui/badge'
+import { useAuth } from '@/hooks/useAuth'
 
 const tabs = [
   {
@@ -52,20 +53,24 @@ export default function EventLayout({
 }: {
   children: React.ReactNode
 }) {
+  const { user: authUser, isLoggedIn, logout } = useAuth()
+
   // Mock data - in real app, this would come from context/API
   const event = {
     name: 'EthBoulder 2026',
     status: 'voting_open' as const,
   }
 
-  const user = {
-    name: 'Alice Chen',
-  }
+  // Use real user if logged in, otherwise undefined
+  const user = isLoggedIn && authUser ? {
+    name: authUser.displayName || 'User',
+  } : undefined
 
-  const credits = {
+  // Credits would come from a separate hook/API in the future
+  const credits = isLoggedIn ? {
     total: 100,
     spent: 18,
-  }
+  } : undefined
 
   const statusLabels = {
     proposals_open: 'Proposals Open',
@@ -89,7 +94,7 @@ export default function EventLayout({
         eventName={event.name}
         user={user}
         credits={credits}
-        onSignOut={() => console.log('Sign out')}
+        onSignOut={logout}
       />
 
       {/* Event Status Banner */}
@@ -105,9 +110,11 @@ export default function EventLayout({
               </span>
             </div>
 
-            <div className="sm:hidden">
-              <CreditBar total={credits.total} spent={credits.spent} />
-            </div>
+            {credits && (
+              <div className="sm:hidden">
+                <CreditBar total={credits.total} spent={credits.spent} />
+              </div>
+            )}
           </div>
         </Container>
       </div>
