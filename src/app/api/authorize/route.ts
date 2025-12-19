@@ -66,6 +66,30 @@ export async function POST(request: NextRequest) {
     // Wait for transaction to be mined
     const receipt = await tx.wait()
 
+    // Verify authorization is readable on-chain before returning
+    // This handles RPC read-replica lag
+    const identityHash = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ['uint256', 'uint256'],
+        [pubKeyX, pubKeyY]
+      )
+    )
+
+    let verified = false
+    for (let i = 0; i < 5; i++) {
+      const storedExpiry = await contract.signers(identityHash, signer)
+      if (storedExpiry && Number(storedExpiry) === expiry) {
+        verified = true
+        break
+      }
+      // Wait 500ms before retry
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+
+    if (!verified) {
+      console.warn('Authorization tx mined but state not yet readable, proceeding anyway')
+    }
+
     return NextResponse.json({
       success: true,
       txHash: receipt.hash
