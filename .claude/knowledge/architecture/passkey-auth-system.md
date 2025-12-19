@@ -51,6 +51,34 @@ Passkey authorizes ephemeral signer once (Face ID), then signer can cast many vo
 3. Signs with ephemeral wallet using standard ECDSA
 4. Backend validates session is authorized on-chain before relaying
 
-## Two-Gate Security Model
-- **Gate 1**: Passkey must be registered in database (all routes)
-- **Gate 2**: Signer must be authorized on-chain with valid expiry (vote route only)
+## Three-Gate Security Model
+
+The system uses a localStorage-based architecture with NO JWT tokens or server-side sessions:
+
+### Gate 1: Registration (Database Validation)
+- User registers at `/register?code=INVITE_CODE`
+- Creates WebAuthn passkey (P-256) via `navigator.credentials.create()`
+- Public key coordinates (X, Y) extracted from CBOR attestationObject
+- Backend `/api/register` validates invite code, stores pubkey in Supabase, burns code
+- **localStorage stores**: `{ credentialId, userId, pubKeyX, pubKeyY }`
+
+### Gate 2: Authorization (On-chain Signer)
+- `useVoting` hook calls `authorizeSession()` when needed
+- Generates ephemeral wallet (valid 7 days)
+- Creates authorization message: `keccak256(abi.encodePacked(signer, expiry, chainId, contractAddress))`
+- User authenticates with Face ID/Touch ID to sign with passkey
+- WebAuthn DER signature formatted to raw r||s format
+- Backend `/api/authorize` validates passkey exists in DB, calls `contract.authorizeSigner()`
+- **localStorage stores**: `{ privateKey, address, expiry }`
+
+### Gate 3: Voting (On-chain Expiry Check)
+- `/api/vote` checks `signers(identityHash, signer)` on-chain for valid expiry
+- Only relays votes if both gate 1 and gate 2 pass
+
+## State Management Architecture
+
+**NO JWT/SESSION middleware** - state management is entirely client-side:
+- `hasPasskey()` checks localStorage for passkeyInfo
+- `hasValidSession()` checks localStorage sessionKey expiry
+- No HTTP cookies, no auth headers, no middleware
+- Component-level state with React.useState (no Redux/Context/Zustand)
