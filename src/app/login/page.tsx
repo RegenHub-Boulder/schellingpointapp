@@ -37,17 +37,35 @@ export default function LoginPage() {
   React.useEffect(() => {
     if (!isMounted) return
 
-    if (!hasPasskey()) {
+    // Check localStorage directly to avoid stale closure issues
+    const passkeyInfo = localStorage.getItem('passkeyInfo')
+    const sessionKey = localStorage.getItem('sessionKey')
+
+    console.log('Login page check:', { passkeyInfo: !!passkeyInfo, sessionKey: !!sessionKey })
+
+    if (!passkeyInfo) {
       setError('No passkey found. Please register first.')
       setStatus('error')
       return
     }
 
-    if (!hasValidSession()) {
+    // Check if session is valid
+    if (sessionKey) {
+      try {
+        const session = JSON.parse(sessionKey)
+        const isValid = session.expiry > Math.floor(Date.now() / 1000)
+        if (!isValid) {
+          setNeedsAuth(true)
+        }
+      } catch {
+        setNeedsAuth(true)
+      }
+    } else {
       setNeedsAuth(true)
     }
+
     setStatus('idle')
-  }, [isMounted, hasPasskey, hasValidSession])
+  }, [isMounted])
 
   const handleLogin = async () => {
     setError(null)
