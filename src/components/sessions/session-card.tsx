@@ -70,7 +70,7 @@ export function SessionCard({
   const trackInfo = session.track ? trackConfig[session.track] : null
 
   return (
-    <Card className={cn('p-5', className)}>
+    <Card className={cn('p-5', className)} data-testid="session-card">
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
