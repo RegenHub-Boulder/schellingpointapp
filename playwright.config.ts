@@ -25,11 +25,9 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
 
   /* Reporter configuration */
-  reporter: [
-    ['html', { open: 'never' }],
-    ['list'],
-    ...(process.env.CI ? [['github' as const]] : []),
-  ],
+  reporter: process.env.CI
+    ? [['html', { open: 'never' }], ['list'], ['github', {}]]
+    : [['html', { open: 'never' }], ['list']],
 
   /* Global timeout for each test */
   timeout: 30000,
