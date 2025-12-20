@@ -249,9 +249,9 @@ export function expectStatus(response: { status: () => number }, expectedStatus:
 /**
  * Assert API response contains expected fields
  */
-export function expectFields<T>(data: T, fields: (keyof T)[]) {
+export function expectFields<T extends object>(data: T, fields: (keyof T)[]) {
   for (const field of fields) {
-    expect(data).toHaveProperty(field as string)
+    expect(field in data).toBeTruthy()
   }
 }
 

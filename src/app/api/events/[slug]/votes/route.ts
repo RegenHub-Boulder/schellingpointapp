@@ -83,7 +83,8 @@ export async function POST(
   const creditsForVote = voteCount * voteCount
 
   // Get user's current balance
-  const { data: balance } = await supabase
+  // Note: tables not yet in generated types, using type assertion
+  const { data: balance } = await (supabase as any)
     .from('user_pre_vote_balance')
     .select('credits_spent, credits_remaining')
     .eq('event_id', event.id)
@@ -91,7 +92,7 @@ export async function POST(
     .single()
 
   // Get user's current vote on this session (if any)
-  const { data: existingVote } = await supabase
+  const { data: existingVote } = await (supabase as any)
     .from('pre_votes')
     .select('vote_count, credits_spent')
     .eq('event_id', event.id)
@@ -117,7 +118,7 @@ export async function POST(
   // Upsert the vote
   if (voteCount === 0) {
     // Delete the vote if voteCount is 0
-    await supabase
+    await (supabase as any)
       .from('pre_votes')
       .delete()
       .eq('event_id', event.id)
@@ -125,7 +126,7 @@ export async function POST(
       .eq('user_id', user.id)
   } else {
     // Insert or update the vote
-    const { error: voteError } = await supabase
+    const { error: voteError } = await (supabase as any)
       .from('pre_votes')
       .upsert({
         event_id: event.id,
@@ -147,7 +148,7 @@ export async function POST(
   }
 
   // Get updated balance
-  const { data: updatedBalance } = await supabase
+  const { data: updatedBalance } = await (supabase as any)
     .from('user_pre_vote_balance')
     .select('credits_spent, credits_remaining')
     .eq('event_id', event.id)

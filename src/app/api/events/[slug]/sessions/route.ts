@@ -103,7 +103,7 @@ export async function GET(
       .eq('user_id', currentUserId)
 
     if (hostRecords) {
-      userSessionIds = hostRecords.map(h => h.session_id)
+      userSessionIds = hostRecords.map(h => h.session_id).filter((id): id is string => id !== null)
       if (userSessionIds.length === 0) {
         // User has no sessions
         return NextResponse.json({ sessions: [] })

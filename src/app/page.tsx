@@ -181,12 +181,7 @@ export default function LandingPage() {
                   <span>{event.location}</span>
                 </div>
               )}
-              {event?.participantCount !== undefined && (
-                <div className="flex items-center gap-1.5">
-                  <Users className="h-4 w-4" />
-                  <span>{event.participantCount} participants</span>
-                </div>
-              )}
+              {/* Participant count would go here when available in the API */}
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -272,13 +267,13 @@ export default function LandingPage() {
             </div>
             <div className="text-center">
               <div className="text-3xl sm:text-4xl font-bold">
-                {eventLoading ? '...' : (event?.participantCount || 0)}
+                {eventLoading ? '...' : '---'}
               </div>
               <div className="text-sm text-muted-foreground mt-1">Participants</div>
             </div>
             <div className="text-center">
               <div className="text-3xl sm:text-4xl font-bold">
-                {eventLoading ? '...' : formatBudget(budgetConfig?.totalBudget || 0)}
+                {eventLoading ? '...' : formatBudget(budgetConfig?.totalBudgetPool || 0)}
               </div>
               <div className="text-sm text-muted-foreground mt-1">Session Budget</div>
             </div>

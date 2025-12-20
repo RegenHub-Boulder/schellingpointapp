@@ -74,12 +74,12 @@ export default function AdminSchedulePage() {
         id: s.id,
         title: s.title,
         host: s.hosts?.[0]?.name || 'Unknown',
-        votes: 0, // TODO: Get from pre_vote_stats
-        track: (s.track as SessionTrack) || 'technical',
+        votes: s.preVoteStats?.totalVotes || 0,
+        track: 'technical' as SessionTrack, // Default track since not in API
         format: s.format || 'talk',
         durationMinutes: s.duration || 45,
-        venueId: s.venueId,
-        slotId: s.timeSlotId,
+        venueId: s.venue?.id,
+        slotId: s.timeSlot?.id,
         locked: s.isLocked,
       }))
       setSessions(transformed)

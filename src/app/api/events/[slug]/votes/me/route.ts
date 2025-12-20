@@ -35,7 +35,8 @@ export async function GET(
   const maxCredits = event.pre_vote_credits || 100
 
   // Get user's votes
-  const { data: votes, error: votesError } = await supabase
+  // Note: pre_votes table not yet in generated types, using type assertion
+  const { data: votes, error: votesError } = await (supabase as any)
     .from('pre_votes')
     .select(`
       session_id,
@@ -61,7 +62,8 @@ export async function GET(
   }
 
   // Get user's balance
-  const { data: balance } = await supabase
+  // Note: user_pre_vote_balance table not yet in generated types
+  const { data: balance } = await (supabase as any)
     .from('user_pre_vote_balance')
     .select('credits_spent, credits_remaining')
     .eq('event_id', event.id)
@@ -69,7 +71,7 @@ export async function GET(
     .single()
 
   // Transform votes to include session info
-  const transformedVotes = votes?.map(vote => ({
+  const transformedVotes = votes?.map((vote: any) => ({
     sessionId: vote.session_id,
     voteCount: vote.vote_count,
     creditsSpent: vote.credits_spent,
@@ -85,7 +87,7 @@ export async function GET(
       totalCredits: maxCredits,
     },
     summary: {
-      totalVotes: transformedVotes.reduce((sum, v) => sum + v.voteCount, 0),
+      totalVotes: transformedVotes.reduce((sum: number, v: any) => sum + v.voteCount, 0),
       sessionsVoted: transformedVotes.length,
     }
   })
