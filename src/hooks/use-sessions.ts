@@ -51,6 +51,7 @@ interface UseSessionsOptions {
   status?: string
   format?: string
   tags?: string[]
+  mine?: boolean
 }
 
 interface UseSessionsReturn {
@@ -76,6 +77,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
       if (options.tags && options.tags.length > 0) {
         params.set('tags', options.tags.join(','))
       }
+      if (options.mine) params.set('mine', 'true')
 
       const queryString = params.toString()
       const url = `/api/events/${EVENT_SLUG}/sessions${queryString ? `?${queryString}` : ''}`
@@ -94,7 +96,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
     } finally {
       setLoading(false)
     }
-  }, [options.status, options.format, options.tags])
+  }, [options.status, options.format, options.tags, options.mine])
 
   useEffect(() => {
     fetchSessions()
