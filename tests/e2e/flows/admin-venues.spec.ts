@@ -13,10 +13,13 @@ test.describe('Admin Venues Page', () => {
   })
 
   test('displays summary stats cards', async ({ page }) => {
-    // Should show stats cards
-    await expect(page.locator('text=Venues')).toBeVisible()
-    await expect(page.locator('text=Total Capacity')).toBeVisible()
-    await expect(page.locator('text=Session Slots')).toBeVisible()
+    // Wait for loading to finish
+    await page.waitForTimeout(2000)
+
+    // Should show stats cards - use exact text to avoid conflicts with other elements
+    await expect(page.getByText('Venues', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Total Capacity', { exact: true })).toBeVisible()
+    await expect(page.getByText('Session Slots', { exact: true })).toBeVisible()
   })
 
   test('has Add Venue button', async ({ page }) => {
@@ -51,16 +54,22 @@ test.describe('Admin Venues - Add Venue Modal', () => {
   })
 
   test('Add Venue opens modal', async ({ page }) => {
+    // Wait for loading to finish
+    await page.waitForTimeout(2000)
+
     const addButton = page.locator('button:has-text("Add Venue")')
     await addButton.click()
 
     // Modal should open
     const modal = page.locator('[role="dialog"]')
     await expect(modal).toBeVisible()
-    await expect(modal.locator('text=Add Venue')).toBeVisible()
+    await expect(modal.getByRole('heading', { name: 'Add Venue' })).toBeVisible()
   })
 
   test('venue form has required fields', async ({ page }) => {
+    // Wait for loading to finish
+    await page.waitForTimeout(2000)
+
     const addButton = page.locator('button:has-text("Add Venue")')
     await addButton.click()
 
@@ -69,11 +78,11 @@ test.describe('Admin Venues - Add Venue Modal', () => {
     await expect(modal).toBeVisible()
 
     // Should have name field
-    await expect(modal.locator('text=Venue Name')).toBeVisible()
+    await expect(modal.getByText('Venue Name', { exact: true })).toBeVisible()
     // Should have capacity field
-    await expect(modal.locator('text=Capacity')).toBeVisible()
+    await expect(modal.getByText('Capacity', { exact: true })).toBeVisible()
     // Should have features section
-    await expect(modal.locator('text=Features')).toBeVisible()
+    await expect(modal.getByText('Features', { exact: true })).toBeVisible()
   })
 
   test('modal can be closed', async ({ page }) => {

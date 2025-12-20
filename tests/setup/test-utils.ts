@@ -4,7 +4,7 @@ import { Page, expect, APIRequestContext } from '@playwright/test'
 export const TEST_EVENT_SLUG = process.env.TEST_EVENT_SLUG || 'ethdenver-2025'
 
 // Base URL for API requests
-export const API_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3000'
+export const API_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3333'
 
 /**
  * Wait for the page to be fully loaded (no network activity)

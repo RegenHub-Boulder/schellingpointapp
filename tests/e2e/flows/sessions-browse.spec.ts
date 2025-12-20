@@ -77,9 +77,9 @@ test.describe('Sessions Page - Filters', () => {
     const filtersButton = page.locator('button:has-text("Filters")')
     await filtersButton.click()
 
-    // Should show format filter options
-    await expect(page.locator('text=Format')).toBeVisible()
-    await expect(page.locator('text=Sort by')).toBeVisible()
+    // Should show format filter options - use label text to be more specific
+    await expect(page.getByText('Format', { exact: true })).toBeVisible()
+    await expect(page.getByText('Sort by', { exact: true })).toBeVisible()
   })
 
   test('search filters sessions', async ({ page }) => {
