@@ -1,11 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft,
   MapPin,
-  Clock,
   Users,
   Vote,
   Heart,
@@ -16,101 +15,77 @@ import {
   MessageSquare,
   Monitor,
   User,
-  ExternalLink,
-  GitMerge,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { VoteCounter } from '@/components/voting/vote-counter'
+import { useSession } from '@/hooks/use-session'
+import { useVotes } from '@/hooks/use-votes'
+import { useAuth } from '@/hooks'
+
+const formatIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  talk: Mic,
+  workshop: Wrench,
+  discussion: MessageSquare,
+  panel: Users,
+  demo: Monitor,
+}
 
 export function SessionDetailClient() {
   const router = useRouter()
+  const params = useParams()
+  const sessionId = params.id as string
+  const { user } = useAuth()
+
+  // Fetch session data from API
+  const { session, hosts, votes: voteStats, loading, error } = useSession(sessionId)
+
+  // Voting
+  const { balance, getVoteForSession, castVote } = useVotes()
+  const userVotes = getVoteForSession(sessionId)
+
   const [isFavorited, setIsFavorited] = React.useState(false)
-  const [userVotes, setUserVotes] = React.useState(3)
 
-  // Mock data - in real app, this would come from API based on session ID
-  const session = {
-    id: '1',
-    title: 'Decentralized Identity Solutions',
-    description:
-      'Deep dive into self-sovereign identity systems and their implementation using DIDs and verifiable credentials. We\'ll explore current standards like did:web, did:key, and did:ion, along with practical implementations in wallets and applications.',
-    longDescription: `In this comprehensive workshop, we'll explore the fundamentals of decentralized identity and how it's reshaping digital authentication and authorization.
-
-We'll start with the basics of DIDs (Decentralized Identifiers) and VCs (Verifiable Credentials), then move into practical implementations. You'll learn:
-
-• How DIDs work across different methods and networks
-• Creating and managing verifiable credentials
-• Integration patterns with existing applications
-• Privacy considerations and selective disclosure
-• Real-world use cases and adoption challenges
-
-Participants will get hands-on experience creating their own DIDs and issuing verifiable credentials. We'll also discuss the broader ecosystem including wallets, issuers, and verifiers.
-
-This session is ideal for developers, product managers, and anyone interested in building identity solutions for Web3 and beyond.`,
-    format: 'Workshop',
-    duration: 90,
-    host: {
-      name: 'Alice Chen',
-      avatar: '',
-      bio: 'Product designer passionate about decentralized governance and community-driven decision making.',
-      role: 'Product Designer @ Consensus Labs',
-      socials: {
-        twitter: '@alicechen',
-        github: 'alicechen',
-      },
-    },
-    tags: ['Identity', 'Privacy', 'Web3', 'Standards'],
-    track: 'Technical',
-    votes: 89,
-    credits: 1247,
-    venue: {
-      name: 'Main Hall',
-      capacity: 100,
-      features: ['Projector', 'Whiteboard', 'Sound System', 'Recording Equipment'],
-    },
-    scheduledTime: 'February 28, 2026 at 10:00 AM',
-    requirements: [
-      'Laptop with Node.js installed',
-      'Basic understanding of public-key cryptography',
-      'Familiarity with JSON and web APIs',
-    ],
-    agenda: [
-      { time: '10:00', topic: 'Introduction to DIDs and VCs', duration: 15 },
-      { time: '10:15', topic: 'DID Methods Overview', duration: 20 },
-      { time: '10:35', topic: 'Hands-on: Creating Your First DID', duration: 25 },
-      { time: '11:00', topic: 'Break', duration: 10 },
-      { time: '11:10', topic: 'Verifiable Credentials Deep Dive', duration: 20 },
-      { time: '11:30', topic: 'Building an Identity Wallet', duration: 20 },
-      { time: '11:50', topic: 'Q&A and Wrap-up', duration: 10 },
-    ],
-    relatedSessions: [
-      {
-        id: '15',
-        title: 'Privacy-Preserving Authentication',
-        similarityScore: 78,
-      },
-      {
-        id: '22',
-        title: 'Web3 Wallet Security',
-        similarityScore: 65,
-      },
-    ],
+  const handleVote = async (newVotes: number) => {
+    if (!user) {
+      // Could show a sign-in prompt
+      return
+    }
+    await castVote(sessionId, newVotes)
   }
 
-  const formatIcons = {
-    Talk: Mic,
-    Workshop: Wrench,
-    Discussion: MessageSquare,
-    Panel: Users,
-    Demo: Monitor,
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
-  const FormatIcon = formatIcons[session.format as keyof typeof formatIcons]
+  // Error state
+  if (error || !session) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" onClick={() => router.back()} className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Sessions
+        </Button>
+        <div className="text-center py-12">
+          <p className="text-destructive mb-4">{error || 'Session not found'}</p>
+          <Button onClick={() => window.location.reload()}>Try again</Button>
+        </div>
+      </div>
+    )
+  }
 
-  const totalCredits = 100
-  const spentCredits = 18
-  const remainingCredits = totalCredits - spentCredits
+  const FormatIcon = formatIcons[session.format] || Mic
+  const primaryHost = hosts?.find(h => h.isPrimary) || hosts?.[0]
+  const remainingCredits = balance.creditsRemaining
+  const totalVotes = voteStats?.preVote?.totalVotes || 0
+  const totalCreditsSpent = voteStats?.preVote?.totalCreditsSpent || 0
 
   return (
     <div className="space-y-6">
@@ -129,11 +104,9 @@ This session is ideal for developers, product managers, and anyone interested in
               <div className="flex-1">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                   <FormatIcon className="h-4 w-4" />
-                  <span>{session.format}</span>
+                  <span className="capitalize">{session.format}</span>
                   <span className="text-muted-foreground/50">•</span>
                   <span>{session.duration} min</span>
-                  <span className="text-muted-foreground/50">•</span>
-                  <Badge variant="secondary">{session.track}</Badge>
                 </div>
 
                 <h1 className="text-3xl font-bold mb-4">{session.title}</h1>
@@ -159,123 +132,95 @@ This session is ideal for developers, product managers, and anyone interested in
             </div>
 
             {/* Tags */}
-            <div className="flex flex-wrap gap-2">
-              {session.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
+            {session.topicTags && session.topicTags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {session.topicTags.map((tag) => (
+                  <Badge key={tag} variant="secondary">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </Card>
 
           {/* Venue & Schedule */}
-          {session.venue && (
+          {(session.venue || session.timeSlot) && (
             <Card className="p-6 bg-primary/5 border-primary/20">
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <MapPin className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Location</h3>
+                {session.venue && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold">Location</h3>
+                    </div>
+                    <p className="text-lg font-medium">{session.venue.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Capacity: {session.venue.capacity} people
+                    </p>
+                    {session.venue.features && session.venue.features.length > 0 && (
+                      <div className="flex gap-1 mt-2 flex-wrap">
+                        {session.venue.features.map((feature: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {feature}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-lg font-medium">{session.venue.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Capacity: {session.venue.capacity} people
-                  </p>
-                  <div className="flex gap-1 mt-2 flex-wrap">
-                    {session.venue.features.map((feature, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">
-                        {feature}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+                )}
 
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Schedule</h3>
+                {session.timeSlot && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold">Schedule</h3>
+                    </div>
+                    <p className="text-lg font-medium">
+                      {new Date(session.timeSlot.start_time).toLocaleDateString([], {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })} at {new Date(session.timeSlot.start_time).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Duration: {session.duration} minutes
+                    </p>
                   </div>
-                  <p className="text-lg font-medium">{session.scheduledTime}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Duration: {session.duration} minutes
-                  </p>
-                </div>
+                )}
               </div>
             </Card>
           )}
 
           {/* Full Description */}
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">About This Session</h2>
-            <div className="prose prose-sm max-w-none">
-              {session.longDescription.split('\n').map((paragraph, i) => (
-                <p key={i} className="text-muted-foreground mb-3">
-                  {paragraph}
-                </p>
-              ))}
-            </div>
-          </Card>
-
-          {/* Requirements */}
-          {session.requirements && session.requirements.length > 0 && (
+          {session.description && (
             <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">What to Bring</h2>
+              <h2 className="text-xl font-semibold mb-4">About This Session</h2>
+              <div className="prose prose-sm max-w-none">
+                {session.description.split('\n').map((paragraph: string, i: number) => (
+                  <p key={i} className="text-muted-foreground mb-3">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Technical Requirements */}
+          {session.technicalRequirements && session.technicalRequirements.length > 0 && (
+            <Card className="p-6">
+              <h2 className="text-xl font-semibold mb-4">Technical Requirements</h2>
               <ul className="space-y-2">
-                {session.requirements.map((req, i) => (
+                {session.technicalRequirements.map((req: string, i: number) => (
                   <li key={i} className="flex items-start gap-2 text-muted-foreground">
                     <span className="text-primary mt-1">•</span>
-                    <span>{req}</span>
+                    <span className="capitalize">{req.replace(/_/g, ' ')}</span>
                   </li>
                 ))}
               </ul>
-            </Card>
-          )}
-
-          {/* Agenda */}
-          {session.agenda && session.agenda.length > 0 && (
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Agenda</h2>
-              <div className="space-y-3">
-                {session.agenda.map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="text-sm font-medium text-muted-foreground w-16">
-                      {item.time}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{item.topic}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {item.duration} minutes
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Related Sessions */}
-          {session.relatedSessions && session.relatedSessions.length > 0 && (
-            <Card className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <GitMerge className="h-5 w-5 text-primary" />
-                <h2 className="text-xl font-semibold">Related Sessions</h2>
-              </div>
-              <div className="space-y-2">
-                {session.relatedSessions.map((related) => (
-                  <div
-                    key={related.id}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium">{related.title}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {related.similarityScore}% similar topics
-                      </div>
-                    </div>
-                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                ))}
-              </div>
             </Card>
           )}
         </div>
@@ -283,39 +228,30 @@ This session is ideal for developers, product managers, and anyone interested in
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Host Info */}
-          <Card className="p-6">
-            <h3 className="font-semibold mb-4">Session Host</h3>
-            <div className="flex items-start gap-3 mb-4">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                {session.host.avatar ? (
-                  <img
-                    src={session.host.avatar}
-                    alt={session.host.name}
-                    className="h-full w-full rounded-full object-cover"
-                  />
-                ) : (
-                  <User className="h-6 w-6 text-muted-foreground" />
-                )}
+          {primaryHost && (
+            <Card className="p-6">
+              <h3 className="font-semibold mb-4">Session Host</h3>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                  {primaryHost.avatar ? (
+                    <img
+                      src={primaryHost.avatar}
+                      alt={primaryHost.name || 'Host'}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-6 w-6 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{primaryHost.name || 'Anonymous Host'}</div>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium">{session.host.name}</div>
-                <div className="text-xs text-muted-foreground">{session.host.role}</div>
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">{session.host.bio}</p>
-            <div className="flex gap-2">
-              {session.host.socials.twitter && (
-                <Button variant="outline" size="sm" className="flex-1">
-                  Twitter
-                </Button>
+              {primaryHost.bio && (
+                <p className="text-sm text-muted-foreground">{primaryHost.bio}</p>
               )}
-              {session.host.socials.github && (
-                <Button variant="outline" size="sm" className="flex-1">
-                  GitHub
-                </Button>
-              )}
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {/* Voting */}
           <Card className="p-6">
@@ -325,17 +261,17 @@ This session is ideal for developers, product managers, and anyone interested in
                 <span className="text-muted-foreground">Total votes</span>
                 <div className="flex items-center gap-1">
                   <Vote className="h-4 w-4" />
-                  <span className="font-medium">{session.votes}</span>
+                  <span className="font-medium">{totalVotes}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Credits allocated</span>
-                <span className="font-medium">{session.credits}</span>
+                <span className="font-medium">{totalCreditsSpent}</span>
               </div>
               <div className="pt-4 border-t">
                 <VoteCounter
                   votes={userVotes}
-                  onVote={setUserVotes}
+                  onVote={handleVote}
                   remainingCredits={remainingCredits}
                 />
               </div>

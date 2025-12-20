@@ -14,6 +14,7 @@ import {
   Monitor,
   Check,
   X,
+  AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +23,8 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { SessionTrack, trackConfig, SessionFormat } from '@/types'
+import { EVENT_SLUG } from '@/lib/config'
+import { useAuth } from '@/hooks'
 
 const steps = [
   { id: 1, title: 'Basic Info' },
@@ -64,9 +67,11 @@ const suggestedTags = [
 
 export default function ProposeSessionPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const [currentStep, setCurrentStep] = React.useState(1)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isSubmitted, setIsSubmitted] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
   // Form data
   const [title, setTitle] = React.useState('')
@@ -118,11 +123,50 @@ export default function ProposeSessionPage() {
   }
 
   const handleSubmit = async () => {
+    if (!user) {
+      setError('You must be signed in to propose a session')
+      return
+    }
+
     setIsSubmitting(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsSubmitting(false)
-    setIsSubmitted(true)
+    setError(null)
+
+    try {
+      // Map technical requirements to human-readable format
+      const techRequirementsMap: Record<string, string> = {
+        projector: 'projector',
+        whiteboard: 'whiteboard',
+        audio: 'audio',
+        seating: 'seating',
+      }
+
+      const response = await fetch(`/api/events/${EVENT_SLUG}/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          description,
+          format,
+          duration,
+          maxParticipants: maxParticipants ? parseInt(maxParticipants) : null,
+          technicalRequirements: requirements.map(r => techRequirementsMap[r] || r),
+          topicTags: tags,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to submit session proposal')
+      }
+
+      setIsSubmitted(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (isSubmitted) {
@@ -137,7 +181,7 @@ export default function ProposeSessionPage() {
         </p>
         <div className="flex justify-center gap-3">
           <Button variant="outline" asChild>
-            <Link href="/event/sessions">View Sessions</Link>
+            <Link href="/event/my-sessions">View My Sessions</Link>
           </Button>
           <Button onClick={() => {
             setIsSubmitted(false)
@@ -150,6 +194,7 @@ export default function ProposeSessionPage() {
             setRequirements([])
             setMaxParticipants('')
             setTags([])
+            setError(null)
           }}>
             Propose Another
           </Button>
@@ -488,6 +533,22 @@ export default function ProposeSessionPage() {
                 appearing to other participants.
               </p>
             </div>
+
+            {error && (
+              <div className="p-4 rounded-lg border bg-destructive/5 border-destructive/20 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
+
+            {!user && (
+              <div className="p-4 rounded-lg border bg-amber-500/5 border-amber-500/20 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm">
+                  You must be signed in to submit a session proposal.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Card>

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import {
   MapPin,
   Clock,
@@ -10,120 +11,41 @@ import {
   XCircle,
   AlertCircle,
   Calendar,
-  GitMerge,
-  Trash2,
   Edit,
-  ExternalLink,
   FileText,
   Upload,
   Home,
+  Loader2,
+  Plus,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SelfHostedModal } from '@/components/sessions/self-hosted-modal'
+import { useSessions, Session } from '@/hooks/use-sessions'
+import { useAuth } from '@/hooks'
 
 type SessionStatus = 'pending' | 'approved' | 'scheduled' | 'rejected' | 'self-hosted'
 
-interface Session {
-  id: number
-  title: string
-  description: string
-  format: string
-  duration: number
-  status: SessionStatus
-  votes: number
-  credits: number
-  venue?: {
-    name: string
-    capacity: number
-    features: string[]
-  }
-  scheduledTime?: string
-  selfHostedDetails?: {
-    venue: string
-    date: string
-    time: string
-    notes?: string
-  }
-  mergeSuggestions?: {
-    sessionId: number
-    sessionTitle: string
-    similarityScore: number
-  }[]
-}
-
 export default function MySessionsPage() {
-  const [selectedSessions, setSelectedSessions] = React.useState<number[]>([])
-  const [showMergeModal, setShowMergeModal] = React.useState(false)
-  const [uploadingTranscript, setUploadingTranscript] = React.useState<number | null>(null)
-  const [sessionsWithTranscripts, setSessionsWithTranscripts] = React.useState<Set<number>>(
+  const { user } = useAuth()
+  const { sessions: apiSessions, loading, error, refetch } = useSessions({ mine: true })
+
+  const [uploadingTranscript, setUploadingTranscript] = React.useState<string | null>(null)
+  const [sessionsWithTranscripts, setSessionsWithTranscripts] = React.useState<Set<string>>(
     new Set()
   )
-  const [selfHostedSessionId, setSelfHostedSessionId] = React.useState<number | null>(null)
+  const [selfHostedSessionId, setSelfHostedSessionId] = React.useState<string | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  // Mock data - in real app, this would come from API
-  const mockSessions: Session[] = [
-    {
-      id: 1,
-      title: 'Decentralized Identity Solutions',
-      description:
-        'Deep dive into self-sovereign identity systems and their implementation using DIDs and verifiable credentials.',
-      format: 'Workshop',
-      duration: 90,
-      status: 'scheduled',
-      votes: 89,
-      credits: 1247,
-      venue: {
-        name: 'Main Hall',
-        capacity: 100,
-        features: ['Projector', 'Whiteboard', 'Sound System'],
-      },
-      scheduledTime: 'Mar 15, 10:00 AM',
-    },
-    {
-      id: 2,
-      title: 'Web3 UX Design Patterns',
-      description:
-        'Explore best practices for creating intuitive user experiences in decentralized applications.',
-      format: 'Talk',
-      duration: 45,
-      status: 'approved',
-      votes: 52,
-      credits: 789,
-      mergeSuggestions: [
-        {
-          sessionId: 15,
-          sessionTitle: 'Designing for Decentralization',
-          similarityScore: 85,
-        },
-      ],
-    },
-    {
-      id: 3,
-      title: 'DAO Governance Models',
-      description:
-        'Comparative analysis of governance mechanisms across different DAOs.',
-      format: 'Discussion',
-      duration: 60,
-      status: 'pending',
-      votes: 34,
-      credits: 456,
-    },
-    {
-      id: 4,
-      title: 'Introduction to Smart Contracts',
-      description: 'Beginner-friendly introduction to Solidity and smart contract development.',
-      format: 'Workshop',
-      duration: 120,
-      status: 'rejected',
-      votes: 12,
-      credits: 98,
-    },
-  ]
-
-  const [sessions, setSessions] = React.useState<Session[]>(mockSessions)
+  // Transform API sessions to include vote stats
+  const sessions = React.useMemo(() => {
+    return apiSessions.map(s => ({
+      ...s,
+      votes: s.preVoteStats?.totalVotes || 0,
+      credits: 0, // Credits spent not currently tracked per-session
+    }))
+  }, [apiSessions])
 
   const statusConfig = {
     pending: {
@@ -158,12 +80,7 @@ export default function MySessionsPage() {
     },
   }
 
-  const handleMergeRequest = (sessionId: number, targetId: number) => {
-    console.log(`Requesting merge: Session ${sessionId} with Session ${targetId}`)
-    // In real app, this would send a merge request to the API
-  }
-
-  const handleTranscriptUpload = async (sessionId: number, file: File) => {
+  const handleTranscriptUpload = async (sessionId: string, file: File) => {
     setUploadingTranscript(sessionId)
 
     try {
@@ -185,16 +102,16 @@ export default function MySessionsPage() {
     }
   }
 
-  const triggerFileInput = (sessionId: number) => {
+  const triggerFileInput = (sessionId: string) => {
     if (fileInputRef.current) {
-      fileInputRef.current.dataset.sessionId = sessionId.toString()
+      fileInputRef.current.dataset.sessionId = sessionId
       fileInputRef.current.click()
     }
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    const sessionId = parseInt(e.target.dataset.sessionId || '0')
+    const sessionId = e.target.dataset.sessionId || ''
 
     if (file && sessionId) {
       handleTranscriptUpload(sessionId, file)
@@ -211,13 +128,8 @@ export default function MySessionsPage() {
     notes?: string
   }) => {
     if (selfHostedSessionId !== null) {
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === selfHostedSessionId
-            ? { ...s, status: 'self-hosted' as SessionStatus, selfHostedDetails: details }
-            : s
-        )
-      )
+      // In real app, would save to API
+      console.log('Self-hosted details:', details)
       setSelfHostedSessionId(null)
     }
   }
@@ -227,7 +139,37 @@ export default function MySessionsPage() {
     scheduled: sessions.filter((s) => s.status === 'scheduled').length,
     approved: sessions.filter((s) => s.status === 'approved').length,
     pending: sessions.filter((s) => s.status === 'pending').length,
-    selfHosted: sessions.filter((s) => s.status === 'self-hosted').length,
+  }
+
+  // Not signed in
+  if (!user) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground mb-4">Please sign in to view your sessions.</p>
+        <Button asChild>
+          <Link href="/">Sign In</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">Failed to load sessions: {error}</p>
+        <Button onClick={() => refetch()}>Try again</Button>
+      </div>
+    )
   }
 
   return (
@@ -275,14 +217,25 @@ export default function MySessionsPage() {
       {/* Sessions List */}
       <div className="space-y-4">
         {sessions.map((session) => {
-          const statusInfo = statusConfig[session.status]
+          const statusKey = session.status as SessionStatus
+          const statusInfo = statusConfig[statusKey] || statusConfig.pending
+          const scheduledTime = session.timeSlot
+            ? new Date(session.timeSlot.start_time).toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            : null
           return (
             <Card key={session.id} className="p-6">
               {/* Header */}
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold">{session.title}</h3>
+                    <Link href={`/event/sessions/${session.id}`} className="hover:underline">
+                      <h3 className="text-lg font-semibold">{session.title}</h3>
+                    </Link>
                     <Badge variant={statusInfo.variant} className="flex items-center gap-1">
                       {statusInfo.icon}
                       {statusInfo.label}
@@ -306,23 +259,13 @@ export default function MySessionsPage() {
                         : 'Upload Transcript'}
                     </Button>
                   )}
-                  {(session.status === 'rejected' || session.status === 'approved') && !session.selfHostedDetails && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelfHostedSessionId(session.id)}
-                      className="text-primary border-primary"
-                    >
-                      <Home className="h-4 w-4 mr-1" />
-                      Make Self-Hosted
+                  {session.status === 'pending' && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/event/sessions/${session.id}/edit`}>
+                        <Edit className="h-4 w-4" />
+                      </Link>
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
 
@@ -331,19 +274,17 @@ export default function MySessionsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span>
-                    {session.duration} min • {session.format}
+                    {session.duration} min • <span className="capitalize">{session.format}</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Vote className="h-4 w-4 text-muted-foreground" />
-                  <span>
-                    {session.votes} votes • {session.credits} credits
-                  </span>
+                  <span>{session.votes} votes</span>
                 </div>
-                {session.scheduledTime && (
+                {scheduledTime && (
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{session.scheduledTime}</span>
+                    <span>{scheduledTime}</span>
                   </div>
                 )}
                 {session.venue && (
@@ -365,92 +306,29 @@ export default function MySessionsPage() {
                           <Users className="h-3 w-3" />
                           {session.venue.capacity} capacity
                         </div>
-                        <div className="flex gap-1">
-                          {session.venue.features.slice(0, 3).map((feature, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
-                              {feature}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Self-Hosted Details */}
-              {session.selfHostedDetails && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Home className="h-4 w-4 text-blue-700" />
-                    <div className="text-sm font-medium text-blue-900">Community Session Details</div>
-                  </div>
-                  <div className="space-y-1 text-sm text-blue-800">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-3 w-3" />
-                      <strong>Location:</strong> {session.selfHostedDetails.venue}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-3 w-3" />
-                      <strong>Date:</strong> {session.selfHostedDetails.date}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-3 w-3" />
-                      <strong>Time:</strong> {session.selfHostedDetails.time}
-                    </div>
-                    {session.selfHostedDetails.notes && (
-                      <div className="flex items-start gap-2 mt-2">
-                        <FileText className="h-3 w-3 mt-0.5" />
-                        <div>
-                          <strong>Notes:</strong> {session.selfHostedDetails.notes}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Merge Suggestions */}
-              {session.mergeSuggestions && session.mergeSuggestions.length > 0 && (
-                <div className="border-t pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <GitMerge className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Merge Suggestions</span>
-                    <Badge variant="secondary" className="text-xs">
-                      Save {session.mergeSuggestions.length} conflicts
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {session.mergeSuggestions.map((suggestion) => (
-                      <div
-                        key={suggestion.sessionId}
-                        className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">{suggestion.sessionTitle}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {suggestion.similarityScore}% topic similarity • Merge to get 10% vote
-                            bonus
+                        {session.venue.features && session.venue.features.length > 0 && (
+                          <div className="flex gap-1">
+                            {session.venue.features.slice(0, 3).map((feature: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="text-xs">
+                                {feature}
+                              </Badge>
+                            ))}
                           </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              handleMergeRequest(session.id, suggestion.sessionId)
-                            }
-                          >
-                            <GitMerge className="h-3 w-3 mr-1" />
-                            Request Merge
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <ExternalLink className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        )}
                       </div>
-                    ))}
+                    </div>
                   </div>
+                </div>
+              )}
+
+              {/* Topic Tags */}
+              {session.topicTags && session.topicTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-4">
+                  {session.topicTags.map((tag: string) => (
+                    <Badge key={tag} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
                 </div>
               )}
 
@@ -476,7 +354,12 @@ export default function MySessionsPage() {
             <p className="text-muted-foreground mb-4">
               You haven't proposed any sessions for this event.
             </p>
-            <Button>Propose Your First Session</Button>
+            <Button asChild>
+              <Link href="/event/propose">
+                <Plus className="h-4 w-4 mr-2" />
+                Propose Your First Session
+              </Link>
+            </Button>
           </div>
         </Card>
       )}

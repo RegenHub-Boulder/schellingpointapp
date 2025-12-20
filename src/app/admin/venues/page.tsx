@@ -15,7 +15,8 @@ import {
   Mic,
   Coffee,
   Zap,
-  Check
+  Check,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,13 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-
-interface Venue {
-  id: string
-  name: string
-  capacity: number
-  features: string[]
-}
+import { useVenues, Venue } from '@/hooks/use-venues'
 
 interface TimeSlot {
   id: string
@@ -76,13 +71,7 @@ const featureLabels: Record<string, string> = {
 
 const allFeatures = Object.keys(featureLabels)
 
-const initialVenues: Venue[] = [
-  { id: '1', name: 'Main Hall', capacity: 150, features: ['projector', 'microphone', 'av_support'] },
-  { id: '2', name: 'Workshop A', capacity: 40, features: ['projector', 'whiteboard', 'power_outlets'] },
-  { id: '3', name: 'Workshop B', capacity: 30, features: ['projector', 'whiteboard'] },
-  { id: '4', name: 'Breakout 1', capacity: 25, features: ['whiteboard'] },
-]
-
+// Time slots are still managed locally for now (TODO: create time_slots API)
 const initialTimeSlots: TimeSlot[] = [
   { id: '1', startTime: '09:00', endTime: '09:30', type: 'locked', label: 'Opening Ceremony', day: 1 },
   { id: '2', startTime: '09:45', endTime: '10:45', type: 'session', day: 1 },
@@ -101,13 +90,16 @@ const initialTimeSlots: TimeSlot[] = [
 ]
 
 export default function AdminVenuesPage() {
-  const [venues, setVenues] = React.useState(initialVenues)
+  // Use the venues hook for API integration
+  const { venues, loading, error, createVenue, updateVenue, deleteVenue, refetch } = useVenues()
+
   const [timeSlots, setTimeSlots] = React.useState(initialTimeSlots)
   const [editingVenue, setEditingVenue] = React.useState<Venue | null>(null)
   const [editingSlot, setEditingSlot] = React.useState<TimeSlot | null>(null)
   const [showAddVenue, setShowAddVenue] = React.useState(false)
   const [showAddSlot, setShowAddSlot] = React.useState(false)
   const [selectedDay, setSelectedDay] = React.useState(1)
+  const [saving, setSaving] = React.useState(false)
 
   // Form state for venues
   const [venueName, setVenueName] = React.useState('')
@@ -149,28 +141,45 @@ export default function AdminVenuesPage() {
     setShowAddVenue(true)
   }
 
-  const handleSaveVenue = () => {
+  const handleSaveVenue = async () => {
     if (!venueName || !venueCapacity) return
 
-    if (editingVenue) {
-      setVenues(prev => prev.map(v =>
-        v.id === editingVenue.id
-          ? { ...v, name: venueName, capacity: parseInt(venueCapacity), features: venueFeatures }
-          : v
-      ))
-    } else {
-      setVenues(prev => [...prev, {
-        id: Date.now().toString(),
-        name: venueName,
-        capacity: parseInt(venueCapacity),
-        features: venueFeatures,
-      }])
+    setSaving(true)
+    try {
+      if (editingVenue) {
+        const result = await updateVenue(editingVenue.id, {
+          name: venueName,
+          capacity: parseInt(venueCapacity),
+          features: venueFeatures,
+        })
+        if (!result.success) {
+          alert(result.error || 'Failed to update venue')
+          return
+        }
+      } else {
+        const result = await createVenue({
+          name: venueName,
+          capacity: parseInt(venueCapacity),
+          features: venueFeatures,
+        })
+        if (!result.success) {
+          alert(result.error || 'Failed to create venue')
+          return
+        }
+      }
+      resetVenueForm()
+    } finally {
+      setSaving(false)
     }
-    resetVenueForm()
   }
 
-  const handleDeleteVenue = (id: string) => {
-    setVenues(prev => prev.filter(v => v.id !== id))
+  const handleDeleteVenue = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this venue?')) return
+
+    const result = await deleteVenue(id)
+    if (!result.success) {
+      alert(result.error || 'Failed to delete venue')
+    }
   }
 
   const handleEditSlot = (slot: TimeSlot) => {
@@ -231,6 +240,25 @@ export default function AdminVenuesPage() {
   const daySlots = timeSlots.filter(s => s.day === selectedDay).sort((a, b) => a.startTime.localeCompare(b.startTime))
   const totalCapacity = venues.reduce((sum, v) => sum + v.capacity, 0)
   const sessionSlots = timeSlots.filter(s => s.type === 'session')
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">Failed to load venues: {error}</p>
+        <Button onClick={() => refetch()}>Try again</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -517,12 +545,16 @@ export default function AdminVenuesPage() {
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button variant="outline" onClick={resetVenueForm}>
+              <Button variant="outline" onClick={resetVenueForm} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveVenue} disabled={!venueName || !venueCapacity}>
-                <Save className="h-4 w-4 mr-1" />
-                {editingVenue ? 'Save Changes' : 'Add Venue'}
+              <Button onClick={handleSaveVenue} disabled={!venueName || !venueCapacity || saving}>
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1" />
+                )}
+                {saving ? 'Saving...' : editingVenue ? 'Save Changes' : 'Add Venue'}
               </Button>
             </div>
           </div>
