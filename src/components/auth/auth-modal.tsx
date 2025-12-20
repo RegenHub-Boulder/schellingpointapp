@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Wallet, Mail, Loader2, CheckCircle } from 'lucide-react'
+import { Wallet, Mail, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,6 +11,7 @@ import {
   ModalTitle,
   ModalDescription,
 } from '@/components/ui/modal'
+import { useAuth } from '@/hooks'
 
 interface AuthModalProps {
   open: boolean
@@ -19,47 +20,53 @@ interface AuthModalProps {
   eventName?: string
 }
 
-type AuthStep = 'choose' | 'email' | 'email-sent' | 'wallet' | 'success'
+type AuthStep = 'choose' | 'email' | 'email-sent' | 'wallet' | 'success' | 'error'
 
 export function AuthModal({ open, onOpenChange, onComplete, eventName = 'the event' }: AuthModalProps) {
+  const { signInWithEmail, user } = useAuth()
   const [step, setStep] = React.useState<AuthStep>('choose')
   const [email, setEmail] = React.useState('')
   const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  // If user becomes authenticated, show success
+  React.useEffect(() => {
+    if (user && open) {
+      setStep('success')
+      setTimeout(() => {
+        handleComplete()
+      }, 1000)
+    }
+  }, [user, open])
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
 
     setLoading(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setLoading(false)
-    setStep('email-sent')
-  }
+    setError(null)
 
-  const handleSimulateEmailClick = async () => {
-    // For demo: simulate clicking the magic link
-    setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 800))
+    const { error } = await signInWithEmail(email)
+
     setLoading(false)
-    setStep('success')
-    // Auto-complete after showing success
-    setTimeout(() => {
-      handleComplete()
-    }, 1000)
+
+    if (error) {
+      setError(error.message)
+      setStep('error')
+    } else {
+      setStep('email-sent')
+    }
   }
 
   const handleWalletConnect = async () => {
+    // Wallet connection will be implemented later (Web3 integration)
     setStep('wallet')
     setLoading(true)
-    // Simulate wallet connection
+    // For now, show a message that wallet auth is coming soon
     await new Promise((resolve) => setTimeout(resolve, 1500))
     setLoading(false)
-    setStep('success')
-    // Auto-complete after showing success
-    setTimeout(() => {
-      handleComplete()
-    }, 1000)
+    setError('Wallet authentication coming soon. Please use email for now.')
+    setStep('error')
   }
 
   const handleComplete = () => {
@@ -68,6 +75,7 @@ export function AuthModal({ open, onOpenChange, onComplete, eventName = 'the eve
       setStep('choose')
       setEmail('')
       setLoading(false)
+      setError(null)
       onComplete?.()
     }, 200)
   }
@@ -78,6 +86,7 @@ export function AuthModal({ open, onOpenChange, onComplete, eventName = 'the eve
       setStep('choose')
       setEmail('')
       setLoading(false)
+      setError(null)
     }, 200)
   }
 
@@ -177,18 +186,10 @@ export function AuthModal({ open, onOpenChange, onComplete, eventName = 'the eve
                   We sent a magic link to{' '}
                   <span className="font-medium text-foreground">{email}</span>
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  Click the link in the email to sign in. The link will expire in 1 hour.
+                </p>
               </div>
-
-              {/* Demo button to simulate clicking the magic link */}
-              <Button
-                className="w-full"
-                onClick={handleSimulateEmailClick}
-                disabled={loading}
-                data-testid="simulate-magic-link-btn"
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Click here to simulate magic link (Demo)
-              </Button>
 
               <Button
                 variant="ghost"
@@ -199,6 +200,30 @@ export function AuthModal({ open, onOpenChange, onComplete, eventName = 'the eve
                 }}
               >
                 Use a different email
+              </Button>
+            </div>
+          )}
+
+          {step === 'error' && (
+            <div className="text-center space-y-4 py-4">
+              <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-destructive" />
+              </div>
+              <div className="space-y-2">
+                <p className="font-medium">Something went wrong</p>
+                <p className="text-sm text-muted-foreground">
+                  {error || 'An unexpected error occurred. Please try again.'}
+                </p>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setStep('choose')
+                  setError(null)
+                }}
+              >
+                Try again
               </Button>
             </div>
           )}

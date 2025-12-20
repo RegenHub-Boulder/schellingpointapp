@@ -10,6 +10,8 @@ import { CreditBar } from '@/components/voting/credit-bar'
 import { SessionCard } from '@/components/sessions/session-card'
 import { cn } from '@/lib/utils'
 import { useSessions, Session } from '@/hooks/use-sessions'
+import { useVotes } from '@/hooks/use-votes'
+import { useAuth } from '@/hooks'
 
 // Transform API session to UI format
 function transformSession(session: Session) {
@@ -54,46 +56,66 @@ const sortOptions = [
 
 export default function SessionsPage() {
   const router = useRouter()
+  const { user } = useAuth()
 
   // Fetch sessions with approved status (for public voting)
-  const { sessions: apiSessions, loading, error } = useSessions({ status: 'approved' })
+  const { sessions: apiSessions, loading, error, refetch: refetchSessions } = useSessions({ status: 'approved' })
 
-  // Transform API sessions and add local state for votes/favorites
-  const [localState, setLocalState] = React.useState<Record<string, { userVotes: number; isFavorited: boolean }>>({})
+  // Fetch user's votes
+  const { balance, getVoteForSession, castVote } = useVotes()
 
+  // Local state for favorites (will be persisted later)
+  const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
+
+  // Transform API sessions and add user votes
   const sessions = React.useMemo(() => {
     return apiSessions.map(session => {
       const transformed = transformSession(session)
-      const state = localState[session.id] || { userVotes: 0, isFavorited: false }
-      return { ...transformed, ...state }
+      const userVotes = getVoteForSession(session.id)
+      return {
+        ...transformed,
+        userVotes,
+        isFavorited: favorites.has(session.id),
+      }
     })
-  }, [apiSessions, localState])
+  }, [apiSessions, getVoteForSession, favorites])
 
   const [search, setSearch] = React.useState('')
   const [format, setFormat] = React.useState('all')
   const [sort, setSort] = React.useState('votes')
   const [showFilters, setShowFilters] = React.useState(false)
 
-  // Mock user credits (will be replaced with real data later)
-  const totalCredits = 100
-  const spentCredits = sessions.reduce((sum, s) => sum + (s.userVotes * s.userVotes), 0)
-  const remainingCredits = totalCredits - spentCredits
+  // Use real credits from the votes hook
+  const totalCredits = balance.totalCredits
+  const spentCredits = balance.creditsSpent
+  const remainingCredits = balance.creditsRemaining
 
-  const handleVote = (sessionId: string, votes: number) => {
-    setLocalState(prev => ({
-      ...prev,
-      [sessionId]: { ...prev[sessionId], userVotes: votes, isFavorited: prev[sessionId]?.isFavorited || false }
-    }))
+  const handleVote = async (sessionId: string, votes: number) => {
+    if (!user) {
+      // Could show a sign-in prompt here
+      return
+    }
+
+    const result = await castVote(sessionId, votes)
+    if (!result.success) {
+      // Could show an error toast here
+      console.error('Failed to cast vote:', result.error)
+    } else {
+      // Refetch sessions to get updated vote counts
+      refetchSessions()
+    }
   }
 
   const handleToggleFavorite = (sessionId: string) => {
-    setLocalState(prev => ({
-      ...prev,
-      [sessionId]: {
-        userVotes: prev[sessionId]?.userVotes || 0,
-        isFavorited: !prev[sessionId]?.isFavorited
+    setFavorites(prev => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) {
+        next.delete(sessionId)
+      } else {
+        next.add(sessionId)
       }
-    }))
+      return next
+    })
   }
 
   // Filter and sort sessions

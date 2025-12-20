@@ -12,8 +12,22 @@ export async function GET(
   const status = searchParams.get('status')
   const format = searchParams.get('format')
   const tags = searchParams.get('tags')?.split(',')
+  const mine = searchParams.get('mine') === 'true'
 
   const supabase = await createClient()
+
+  // If filtering by user's sessions, get current user
+  let currentUserId: string | null = null
+  if (mine) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized - login required to view your sessions' },
+        { status: 401 }
+      )
+    }
+    currentUserId = user.id
+  }
 
   // First get the event by slug
   const { data: event, error: eventError } = await supabase
@@ -77,6 +91,25 @@ export async function GET(
   }
   if (tags && tags.length > 0) {
     query = query.overlaps('topic_tags', tags)
+  }
+
+  // If filtering for current user's sessions, we need a different approach
+  // We'll filter after fetching since Supabase doesn't support filtering by nested relation
+  let userSessionIds: string[] | null = null
+  if (currentUserId) {
+    const { data: hostRecords } = await supabase
+      .from('session_hosts')
+      .select('session_id')
+      .eq('user_id', currentUserId)
+
+    if (hostRecords) {
+      userSessionIds = hostRecords.map(h => h.session_id)
+      if (userSessionIds.length === 0) {
+        // User has no sessions
+        return NextResponse.json({ sessions: [] })
+      }
+      query = query.in('id', userSessionIds)
+    }
   }
 
   const { data: sessions, error } = await query

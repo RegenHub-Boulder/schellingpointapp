@@ -1,10 +1,9 @@
 'use client'
 
 import * as React from 'react'
-import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { Calendar, MapPin, Users, ChevronDown, ChevronRight } from 'lucide-react'
+import { Calendar, MapPin, Users, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Container } from '@/components/layout/container'
 import { Footer } from '@/components/layout/footer'
@@ -12,13 +11,59 @@ import { AuthModal } from '@/components/auth/auth-modal'
 import { ProfileSetup } from '@/components/auth/profile-setup'
 import { OnboardingTutorial } from '@/components/auth/onboarding-tutorial'
 import { getAssetPath } from '@/lib/asset-path'
+import { useEvent, useSessions } from '@/hooks'
 
 type AuthStep = 'none' | 'auth' | 'profile' | 'onboarding'
+
+// Format date range for display
+function formatDateRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+
+  const startMonth = start.toLocaleDateString('en-US', { month: 'short' })
+  const endMonth = end.toLocaleDateString('en-US', { month: 'short' })
+  const startDay = start.getDate()
+  const endDay = end.getDate()
+  const year = start.getFullYear()
+
+  if (startMonth === endMonth) {
+    return `${startMonth} ${startDay} - ${endDay}, ${year}`
+  }
+  return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${year}`
+}
+
+// Calculate time remaining until deadline
+function getTimeRemaining(deadline: string | null): string {
+  if (!deadline) return ''
+
+  const now = new Date()
+  const deadlineDate = new Date(deadline)
+  const diff = deadlineDate.getTime() - now.getTime()
+
+  if (diff <= 0) return 'Closed'
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+
+  if (days > 0) return `${days}d ${hours}h`
+  return `${hours}h`
+}
+
+// Format budget for display
+function formatBudget(amount: number): string {
+  if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(0)}K`
+  return `$${amount}`
+}
 
 export default function LandingPage() {
   const router = useRouter()
   const [openFaq, setOpenFaq] = React.useState<number | null>(null)
   const [authStep, setAuthStep] = React.useState<AuthStep>('none')
+
+  // Fetch event data and sessions
+  const { event, votingConfig, budgetConfig, loading: eventLoading } = useEvent()
+  const { sessions, loading: sessionsLoading } = useSessions({ status: 'approved' })
 
   const handleEnterEvent = () => {
     setAuthStep('auth')
@@ -66,14 +111,14 @@ export default function LandingPage() {
           if (!open) setAuthStep('none')
         }}
         onComplete={handleAuthComplete}
-        eventName="EthBoulder 2026"
+        eventName={event?.name || 'Event'}
       />
 
       {/* Profile Setup Modal - For demo, auto-trigger after auth modal closes */}
       <ProfileSetup
         open={authStep === 'profile'}
         onComplete={handleProfileComplete}
-        eventName="EthBoulder 2026"
+        eventName={event?.name || 'Event'}
       />
 
       {/* Onboarding Tutorial */}
@@ -105,36 +150,43 @@ export default function LandingPage() {
       <section className="py-20 sm:py-32">
         <Container size="sm">
           <div className="text-center space-y-8">
-            <div className="inline-flex items-center rounded-full border px-4 py-1.5 text-sm text-muted-foreground">
-              <span className="relative flex h-2 w-2 mr-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              Voting Now Open
-            </div>
+            {votingConfig?.preVoteDeadline && new Date(votingConfig.preVoteDeadline) > new Date() && (
+              <div className="inline-flex items-center rounded-full border px-4 py-1.5 text-sm text-muted-foreground">
+                <span className="relative flex h-2 w-2 mr-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                Voting Now Open
+              </div>
+            )}
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">
-              EthBoulder 2026
+              {event?.name || 'Loading...'}
             </h1>
 
             <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-              A community-driven Ethereum unconference where participants vote on sessions
-              and collectively determine how the budget is distributed to speakers.
+              {event?.description || 'A community-driven unconference where participants vote on sessions and collectively determine how the budget is distributed to speakers.'}
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <Calendar className="h-4 w-4" />
-                <span>Feb 27 - Mar 1, 2026</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4" />
-                <span>Boulder, Colorado</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Users className="h-4 w-4" />
-                <span>156 participants</span>
-              </div>
+              {event?.startDate && event?.endDate && (
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4" />
+                  <span>{formatDateRange(event.startDate, event.endDate)}</span>
+                </div>
+              )}
+              {event?.location && (
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" />
+                  <span>{event.location}</span>
+                </div>
+              )}
+              {event?.participantCount !== undefined && (
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4" />
+                  <span>{event.participantCount} participants</span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -213,19 +265,27 @@ export default function LandingPage() {
         <Container>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
             <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold">24</div>
+              <div className="text-3xl sm:text-4xl font-bold">
+                {sessionsLoading ? '...' : sessions.length}
+              </div>
               <div className="text-sm text-muted-foreground mt-1">Sessions Proposed</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold">156</div>
+              <div className="text-3xl sm:text-4xl font-bold">
+                {eventLoading ? '...' : (event?.participantCount || 0)}
+              </div>
               <div className="text-sm text-muted-foreground mt-1">Participants</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold">$10K</div>
+              <div className="text-3xl sm:text-4xl font-bold">
+                {eventLoading ? '...' : formatBudget(budgetConfig?.totalBudget || 0)}
+              </div>
               <div className="text-sm text-muted-foreground mt-1">Session Budget</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold">2d 14h</div>
+              <div className="text-3xl sm:text-4xl font-bold">
+                {votingConfig?.preVoteDeadline ? getTimeRemaining(votingConfig.preVoteDeadline) : 'TBD'}
+              </div>
               <div className="text-sm text-muted-foreground mt-1">Until Voting Closes</div>
             </div>
           </div>

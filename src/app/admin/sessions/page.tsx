@@ -16,7 +16,7 @@ import {
   Tag,
   AlertCircle,
   Send,
-  ChevronDown
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +46,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { SessionTrack, trackConfig } from '@/types'
+import { useSessions, Session as ApiSession } from '@/hooks/use-sessions'
+import { EVENT_SLUG } from '@/lib/config'
 
 interface Session {
   id: string
@@ -55,7 +57,7 @@ interface Session {
   hostEmail: string
   format: 'talk' | 'workshop' | 'discussion' | 'panel' | 'demo'
   track: SessionTrack | null
-  status: 'pending' | 'approved' | 'declined' | 'changes_requested'
+  status: 'pending' | 'approved' | 'declined' | 'changes_requested' | 'rejected' | 'scheduled'
   votes: number
   voters: number
   durationMinutes: number
@@ -65,140 +67,29 @@ interface Session {
   adminNotes?: string
 }
 
-// Mock data with more details
-const mockSessions: Session[] = [
-  {
-    id: '1',
-    title: 'Building DAOs That Actually Work',
-    description: 'A comprehensive look at DAO governance patterns that have proven successful. We\'ll explore voting mechanisms, delegation strategies, and how to balance decentralization with operational efficiency.',
-    host: 'Alice Chen',
-    hostEmail: 'alice@web3.xyz',
-    format: 'talk',
-    track: 'governance',
-    status: 'approved',
-    votes: 127,
-    voters: 68,
-    durationMinutes: 45,
-    technicalRequirements: ['projector', 'microphone'],
-    tags: ['DAOs', 'Governance', 'Voting'],
-    createdAt: '2024-02-01'
-  },
-  {
-    id: '2',
-    title: 'Zero-Knowledge Proofs Workshop',
-    description: 'Hands-on workshop where participants will learn to build their first ZK circuit using Circom. Covers basic theory, practical implementation, and testing.',
-    host: 'Bob Smith',
-    hostEmail: 'bob@zkresearch.io',
-    format: 'workshop',
-    track: 'technical',
-    status: 'approved',
-    votes: 98,
-    voters: 42,
-    durationMinutes: 90,
-    technicalRequirements: ['projector', 'whiteboard', 'power_outlets'],
-    tags: ['ZK', 'Cryptography', 'Workshop'],
-    createdAt: '2024-02-02'
-  },
-  {
-    id: '3',
-    title: 'Advanced Solidity Patterns',
-    description: 'Deep dive into advanced Solidity patterns including proxy contracts, diamond standard, and gas optimization techniques.',
-    host: 'New Proposer',
-    hostEmail: 'newdev@eth.dev',
-    format: 'talk',
-    track: null,
-    status: 'pending',
-    votes: 0,
-    voters: 0,
-    durationMinutes: 45,
-    technicalRequirements: ['projector'],
-    tags: ['Solidity', 'Smart Contracts', 'EVM'],
-    createdAt: '2024-02-15'
-  },
-  {
-    id: '4',
-    title: 'DeFi Security Audit Workshop',
-    description: 'Learn how to audit DeFi protocols. We\'ll walk through real-world vulnerabilities and how to identify them.',
-    host: 'Security Expert',
-    hostEmail: 'auditor@secure.io',
-    format: 'workshop',
-    track: null,
-    status: 'pending',
-    votes: 0,
-    voters: 0,
-    durationMinutes: 90,
-    technicalRequirements: ['projector', 'whiteboard', 'power_outlets'],
-    tags: ['Security', 'DeFi', 'Auditing'],
-    createdAt: '2024-02-16'
-  },
-  {
-    id: '5',
-    title: 'NFT Marketplace Design',
-    description: 'Exploring UX patterns for NFT marketplaces, covering discovery, minting flows, and accessibility.',
-    host: 'UI Designer',
-    hostEmail: 'design@nft.art',
-    format: 'demo',
-    track: null,
-    status: 'pending',
-    votes: 0,
-    voters: 0,
-    durationMinutes: 30,
-    technicalRequirements: ['projector', 'av_support'],
-    tags: ['NFTs', 'UX', 'Design'],
-    createdAt: '2024-02-17'
-  },
-  {
-    id: '6',
-    title: 'Too Short Description',
-    description: 'Short.',
-    host: 'Quick Person',
-    hostEmail: 'quick@email.com',
-    format: 'talk',
-    track: null,
-    status: 'changes_requested',
-    votes: 0,
-    voters: 0,
-    durationMinutes: 45,
-    technicalRequirements: [],
-    tags: ['Quick'],
-    createdAt: '2024-02-18',
-    adminNotes: 'Please expand your description to at least 50 characters and add more relevant tags.'
-  },
-  {
-    id: '7',
-    title: 'Regenerative Finance Panel',
-    description: 'Industry leaders discuss the future of ReFi, carbon credits on-chain, and how Web3 can fund regeneration.',
-    host: 'Carol Williams',
-    hostEmail: 'carol@refi.earth',
-    format: 'panel',
-    track: 'sustainability',
-    status: 'approved',
-    votes: 84,
-    voters: 47,
-    durationMinutes: 60,
-    technicalRequirements: ['projector', 'microphone', 'av_support'],
-    tags: ['ReFi', 'Climate', 'Panel'],
-    createdAt: '2024-02-05'
-  },
-  {
-    id: '8',
-    title: 'Future of L2s',
-    description: 'Exploring rollups, validiums, and emerging L2 solutions. We\'ll compare approaches and discuss scaling tradeoffs.',
-    host: 'David Lee',
-    hostEmail: 'david@l2research.io',
-    format: 'talk',
-    track: 'technical',
-    status: 'approved',
-    votes: 89,
-    voters: 51,
-    durationMinutes: 45,
-    technicalRequirements: ['projector'],
-    tags: ['L2', 'Scaling', 'Rollups'],
-    createdAt: '2024-02-03'
-  },
-]
+// Transform API session to admin UI format
+function transformSession(apiSession: ApiSession): Session {
+  const primaryHost = apiSession.hosts?.find(h => h.isPrimary) || apiSession.hosts?.[0]
+  return {
+    id: apiSession.id,
+    title: apiSession.title,
+    description: apiSession.description || '',
+    host: primaryHost?.name || 'Unknown Host',
+    hostEmail: '', // Not exposed in API for privacy
+    format: apiSession.format as Session['format'],
+    track: null, // Track assignment not implemented yet
+    status: apiSession.status as Session['status'],
+    votes: apiSession.preVoteStats?.totalVotes || 0,
+    voters: apiSession.preVoteStats?.totalVoters || 0,
+    durationMinutes: apiSession.duration,
+    technicalRequirements: apiSession.technicalRequirements || [],
+    tags: apiSession.topicTags || [],
+    createdAt: apiSession.createdAt,
+    adminNotes: apiSession.rejectionReason || undefined,
+  }
+}
 
-const formatIcons = {
+const formatIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   talk: Mic,
   workshop: Wrench,
   discussion: MessageSquare,
@@ -214,50 +105,116 @@ const formatLabels = {
   demo: 'Demo',
 }
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-green-100 text-green-800',
-  declined: 'bg-red-100 text-red-800',
-  changes_requested: 'bg-blue-100 text-blue-800',
+  rejected: 'bg-red-100 text-red-800',
+  scheduled: 'bg-blue-100 text-blue-800',
+  declined: 'bg-red-100 text-red-800', // Alias for rejected
+  changes_requested: 'bg-orange-100 text-orange-800',
 }
 
-const statusLabels = {
+const statusLabels: Record<string, string> = {
   pending: 'Pending',
   approved: 'Approved',
+  rejected: 'Rejected',
+  scheduled: 'Scheduled',
   declined: 'Declined',
   changes_requested: 'Changes Requested',
 }
 
 export default function AdminSessionsPage() {
-  const [sessions, setSessions] = React.useState(mockSessions)
-  const [filter, setFilter] = React.useState<'all' | 'pending' | 'approved' | 'declined' | 'changes_requested'>('all')
+  // Fetch all sessions (no status filter for admin view)
+  const { sessions: apiSessions, loading, error, refetch } = useSessions({})
+
+  // Transform API sessions to UI format
+  const sessions = React.useMemo(() => {
+    return apiSessions.map(transformSession)
+  }, [apiSessions])
+
+  const [filter, setFilter] = React.useState<'all' | 'pending' | 'approved' | 'rejected' | 'scheduled'>('all')
   const [search, setSearch] = React.useState('')
   const [selectedSession, setSelectedSession] = React.useState<Session | null>(null)
   const [showRequestChanges, setShowRequestChanges] = React.useState(false)
   const [requestChangesMessage, setRequestChangesMessage] = React.useState('')
   const [assignTrack, setAssignTrack] = React.useState<SessionTrack | ''>('')
+  const [actionLoading, setActionLoading] = React.useState(false)
 
-  const handleApprove = (id: string, track?: SessionTrack) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: 'approved', track: track || s.track } : s))
-    )
-    setSelectedSession(null)
+  const handleApprove = async (id: string, track?: SessionTrack) => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/events/${EVENT_SLUG}/sessions/${id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to approve session')
+      }
+
+      await refetch()
+      setSelectedSession(null)
+    } catch (err) {
+      console.error('Failed to approve:', err)
+      alert(err instanceof Error ? err.message : 'Failed to approve session')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
-  const handleDecline = (id: string) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: 'declined' } : s))
-    )
-    setSelectedSession(null)
+  const handleDecline = async (id: string) => {
+    const reason = prompt('Please provide a reason for declining this session:')
+    if (!reason) return
+
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/events/${EVENT_SLUG}/sessions/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to reject session')
+      }
+
+      await refetch()
+      setSelectedSession(null)
+    } catch (err) {
+      console.error('Failed to reject:', err)
+      alert(err instanceof Error ? err.message : 'Failed to reject session')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
-  const handleRequestChanges = (id: string, message: string) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: 'changes_requested', adminNotes: message } : s))
-    )
-    setRequestChangesMessage('')
-    setShowRequestChanges(false)
-    setSelectedSession(null)
+  const handleRequestChanges = async (id: string, message: string) => {
+    // For now, request changes is implemented as a rejection with a message
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/events/${EVENT_SLUG}/sessions/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: `Changes requested: ${message}` }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to request changes')
+      }
+
+      await refetch()
+      setRequestChangesMessage('')
+      setShowRequestChanges(false)
+      setSelectedSession(null)
+    } catch (err) {
+      console.error('Failed to request changes:', err)
+      alert(err instanceof Error ? err.message : 'Failed to request changes')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const filteredSessions = sessions.filter((s) => {
@@ -274,7 +231,25 @@ export default function AdminSessionsPage() {
   })
 
   const pendingCount = sessions.filter((s) => s.status === 'pending').length
-  const changesCount = sessions.filter((s) => s.status === 'changes_requested').length
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">Failed to load sessions: {error}</p>
+        <Button onClick={() => refetch()}>Try again</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -293,11 +268,6 @@ export default function AdminSessionsPage() {
               {pendingCount} pending
             </Badge>
           )}
-          {changesCount > 0 && (
-            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-              {changesCount} awaiting changes
-            </Badge>
-          )}
         </div>
       </div>
 
@@ -314,12 +284,13 @@ export default function AdminSessionsPage() {
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          {(['all', 'pending', 'changes_requested', 'approved', 'declined'] as const).map((f) => (
+          {(['all', 'pending', 'approved', 'rejected', 'scheduled'] as const).map((f) => (
             <Button
               key={f}
               variant={filter === f ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilter(f)}
+              disabled={actionLoading}
             >
               {f === 'all' ? 'All' : statusLabels[f]}
               {f === 'pending' && pendingCount > 0 && (

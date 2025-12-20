@@ -8,12 +8,8 @@ import {
   AlertTriangle,
   Loader2,
   GripVertical,
-  Trash2,
-  Eye,
-  Save,
   Send,
   X,
-  Clock,
   Users,
   Lock,
   Unlock
@@ -31,6 +27,7 @@ import {
 } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { SessionTrack, trackConfig } from '@/types'
+import { useVenues, useSessions, useTimeSlots, useSchedule, useEvent } from '@/hooks'
 
 interface ScheduleSession {
   id: string
@@ -45,109 +42,106 @@ interface ScheduleSession {
   locked?: boolean
 }
 
-interface Venue {
-  id: string
-  name: string
-  capacity: number
-}
-
-interface TimeSlot {
-  id: string
-  start: string
-  end: string
-  type: 'session' | 'locked'
-  label?: string
-}
-
-const venues: Venue[] = [
-  { id: '1', name: 'Main Hall', capacity: 150 },
-  { id: '2', name: 'Workshop A', capacity: 40 },
-  { id: '3', name: 'Workshop B', capacity: 30 },
-  { id: '4', name: 'Breakout 1', capacity: 25 },
-]
-
-const timeSlots: TimeSlot[] = [
-  { id: '1', start: '9:00 AM', end: '9:30 AM', type: 'locked', label: 'Opening' },
-  { id: '2', start: '9:45 AM', end: '10:45 AM', type: 'session' },
-  { id: '3', start: '11:00 AM', end: '12:00 PM', type: 'session' },
-  { id: '4', start: '12:00 PM', end: '1:00 PM', type: 'locked', label: 'Lunch' },
-  { id: '5', start: '1:00 PM', end: '2:30 PM', type: 'session' },
-  { id: '6', start: '2:45 PM', end: '3:45 PM', type: 'session' },
-  { id: '7', start: '4:00 PM', end: '5:00 PM', type: 'session' },
-  { id: '8', start: '5:15 PM', end: '6:15 PM', type: 'locked', label: 'Closing' },
-]
-
-const initialSessions: ScheduleSession[] = [
-  { id: '1', title: 'Building DAOs That Actually Work', host: 'Alice Chen', votes: 127, track: 'governance', format: 'talk', durationMinutes: 45 },
-  { id: '2', title: 'Zero-Knowledge Proofs Workshop', host: 'Bob Smith', votes: 98, track: 'technical', format: 'workshop', durationMinutes: 90 },
-  { id: '3', title: 'Community DAOs', host: 'Eve Martinez', votes: 45, track: 'social', format: 'discussion', durationMinutes: 30 },
-  { id: '4', title: 'Future of L2s', host: 'David Lee', votes: 89, track: 'technical', format: 'talk', durationMinutes: 45 },
-  { id: '5', title: 'MEV Protection Workshop', host: 'Frank Johnson', votes: 52, track: 'defi', format: 'workshop', durationMinutes: 60 },
-  { id: '6', title: 'NFT Art and Generative Systems', host: 'Zara Kim', votes: 12, track: 'creative', format: 'demo', durationMinutes: 30 },
-  { id: '7', title: 'Privacy Panel', host: 'Grace Liu', votes: 67, track: 'technical', format: 'panel', durationMinutes: 60 },
-  { id: '8', title: 'Smart Contract Security', host: 'Henry Park', votes: 71, track: 'technical', format: 'workshop', durationMinutes: 60 },
-  { id: '9', title: 'DAO Legal Structures', host: 'Iris Chen', votes: 34, track: 'governance', format: 'discussion', durationMinutes: 30 },
-  { id: '10', title: 'ReFi: Regenerative Finance', host: 'Carol Williams', votes: 84, track: 'sustainability', format: 'talk', durationMinutes: 45 },
-  { id: '11', title: 'Wallet UX Design', host: 'Jack Miller', votes: 43, track: 'creative', format: 'talk', durationMinutes: 30 },
-  { id: '12', title: 'Public Goods Funding', host: 'Karen Davis', votes: 56, track: 'governance', format: 'talk', durationMinutes: 45 },
-  { id: '13', title: 'Cross-chain Bridging', host: 'Leo Wilson', votes: 38, track: 'technical', format: 'talk', durationMinutes: 45 },
-]
-
-// Simulated algorithm output
-const algorithmOutput: Record<string, { venueId: string; slotId: string }> = {
-  '1': { venueId: '1', slotId: '2' },
-  '2': { venueId: '2', slotId: '2' },
-  '3': { venueId: '4', slotId: '2' },
-  '4': { venueId: '1', slotId: '3' },
-  '5': { venueId: '2', slotId: '3' },
-  '6': { venueId: '4', slotId: '3' },
-  '7': { venueId: '1', slotId: '5' },
-  '8': { venueId: '2', slotId: '5' },
-  '9': { venueId: '4', slotId: '5' },
-  '10': { venueId: '1', slotId: '6' },
-  '11': { venueId: '2', slotId: '6' },
-  '12': { venueId: '1', slotId: '7' },
-  '13': { venueId: '2', slotId: '7' },
+// Helper to format time slot for display
+function formatTime(isoString: string): string {
+  const date = new Date(isoString)
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
 export default function AdminSchedulePage() {
-  const [isGenerating, setIsGenerating] = React.useState(false)
+  // Fetch data from APIs
+  const { venues, loading: venuesLoading, error: venuesError } = useVenues()
+  const { sessions: apiSessions, loading: sessionsLoading, error: sessionsError, refetch: refetchSessions } = useSessions({ status: 'approved' })
+  const { timeSlots: apiTimeSlots, loading: slotsLoading, error: slotsError } = useTimeSlots()
+  const { event, loading: eventLoading } = useEvent()
+  const { generate, publish, generating, publishing, lastResult } = useSchedule()
+
+  // Local state for UI
   const [progress, setProgress] = React.useState(0)
   const [generated, setGenerated] = React.useState(false)
-  const [sessions, setSessions] = React.useState<ScheduleSession[]>(initialSessions)
+  const [sessions, setSessions] = React.useState<ScheduleSession[]>([])
   const [draggedSession, setDraggedSession] = React.useState<ScheduleSession | null>(null)
   const [showPreview, setShowPreview] = React.useState(false)
   const [hasChanges, setHasChanges] = React.useState(false)
   const [isPublished, setIsPublished] = React.useState(false)
   const [isEditing, setIsEditing] = React.useState(false)
+  const [qualityScore, setQualityScore] = React.useState(0)
 
-  const handleGenerate = () => {
-    setIsGenerating(true)
+  // Transform API sessions to ScheduleSession format
+  React.useEffect(() => {
+    if (apiSessions.length > 0) {
+      const transformed: ScheduleSession[] = apiSessions.map(s => ({
+        id: s.id,
+        title: s.title,
+        host: s.hosts?.[0]?.name || 'Unknown',
+        votes: 0, // TODO: Get from pre_vote_stats
+        track: (s.track as SessionTrack) || 'technical',
+        format: s.format || 'talk',
+        durationMinutes: s.duration || 45,
+        venueId: s.venueId,
+        slotId: s.timeSlotId,
+        locked: s.isLocked,
+      }))
+      setSessions(transformed)
+    }
+  }, [apiSessions])
+
+  // Check if event schedule is already published
+  React.useEffect(() => {
+    if (event?.schedulePublished) {
+      setIsPublished(true)
+      setGenerated(true)
+    }
+  }, [event])
+
+  // Transform time slots for display
+  const timeSlots = React.useMemo(() => {
+    return apiTimeSlots.map(slot => ({
+      id: slot.id,
+      start: formatTime(slot.startTime),
+      end: formatTime(slot.endTime),
+      type: slot.isAvailable ? 'session' as const : 'locked' as const,
+      label: slot.label || undefined,
+    }))
+  }, [apiTimeSlots])
+
+  const loading = venuesLoading || sessionsLoading || slotsLoading || eventLoading
+  const error = venuesError || sessionsError || slotsError
+
+  const handleGenerate = async () => {
     setProgress(0)
 
+    // Simulate progress while API is called
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setIsGenerating(false)
-          setGenerated(true)
-          // Apply algorithm output, but preserve locked sessions
-          setSessions(prev => prev.map(s => {
-            // If session is locked, keep its current placement
-            if (s.locked && s.venueId && s.slotId) {
-              return s
-            }
-            // Otherwise apply algorithm output
-            return {
-              ...s,
-              ...algorithmOutput[s.id]
-            }
-          }))
-          return 100
+      setProgress((prev) => Math.min(prev + 10, 90))
+    }, 300)
+
+    const result = await generate({ dryRun: false })
+
+    clearInterval(interval)
+    setProgress(100)
+
+    if (result?.success) {
+      setGenerated(true)
+      setQualityScore(result.qualityScore)
+
+      // Update sessions with assignments
+      const assignmentMap = new Map(result.assignments.map(a => [a.sessionId, a]))
+      setSessions(prev => prev.map(s => {
+        const assignment = assignmentMap.get(s.id)
+        if (assignment) {
+          return {
+            ...s,
+            venueId: assignment.venueId,
+            slotId: assignment.timeSlotId,
+          }
         }
-        return prev + 10
-      })
-    }, 500)
+        return s
+      }))
+
+      // Refresh sessions from API
+      refetchSessions()
+    }
   }
 
   const handleDragStart = (session: ScheduleSession) => {
@@ -160,7 +154,7 @@ export default function AdminSchedulePage() {
 
   const handleDrop = (venueId: string, slotId: string) => {
     if (!draggedSession) return
-    if (isPublished && !isEditing) return // Can't edit when published and not in edit mode
+    if (isPublished && !isEditing) return
 
     setSessions(prev => prev.map(s =>
       s.id === draggedSession.id
@@ -172,7 +166,7 @@ export default function AdminSchedulePage() {
   }
 
   const handleRemoveFromSchedule = (sessionId: string) => {
-    if (isPublished && !isEditing) return // Can't edit when published and not in edit mode
+    if (isPublished && !isEditing) return
 
     setSessions(prev => prev.map(s =>
       s.id === sessionId
@@ -182,11 +176,16 @@ export default function AdminSchedulePage() {
     setHasChanges(true)
   }
 
-  const handlePublish = () => {
-    setIsPublished(true)
-    setIsEditing(false)
-    setHasChanges(false)
-    setShowPreview(false)
+  const handlePublish = async () => {
+    const result = await publish()
+    if (result.success) {
+      setIsPublished(true)
+      setIsEditing(false)
+      setHasChanges(false)
+      setShowPreview(false)
+    } else {
+      alert(result.error || 'Failed to publish schedule')
+    }
   }
 
   const handleEditSchedule = () => {
@@ -208,7 +207,7 @@ export default function AdminSchedulePage() {
   const scheduledSessions = sessions.filter(s => s.venueId && s.slotId)
 
   const getConflicts = () => {
-    const conflicts: { session: ScheduleSession; venue: Venue; reason: string }[] = []
+    const conflicts: { session: ScheduleSession; venue: typeof venues[0]; reason: string }[] = []
     scheduledSessions.forEach(session => {
       const venue = venues.find(v => v.id === session.venueId)
       if (venue && session.votes > venue.capacity * 1.2) {
@@ -224,6 +223,25 @@ export default function AdminSchedulePage() {
 
   const conflicts = getConflicts()
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">Failed to load data: {error}</p>
+        <Button onClick={() => window.location.reload()}>Try again</Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -235,8 +253,8 @@ export default function AdminSchedulePage() {
           </p>
         </div>
 
-        {!generated && !isGenerating && (
-          <Button onClick={handleGenerate}>
+        {!generated && !generating && (
+          <Button onClick={handleGenerate} disabled={sessions.length === 0 || venues.length === 0 || timeSlots.length === 0}>
             <Play className="h-4 w-4 mr-2" />
             Auto-Generate Schedule
           </Button>
@@ -244,17 +262,11 @@ export default function AdminSchedulePage() {
 
         {generated && !isPublished && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setGenerated(false); setProgress(0); setSessions(initialSessions); setHasChanges(false); }}>
+            <Button variant="outline" onClick={handleGenerate} disabled={generating}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Regenerate
             </Button>
-            {hasChanges && (
-              <Button variant="outline" onClick={() => setHasChanges(false)}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Draft
-              </Button>
-            )}
-            <Button onClick={() => setShowPreview(true)}>
+            <Button onClick={() => setShowPreview(true)} disabled={publishing}>
               <Send className="h-4 w-4 mr-2" />
               Publish Schedule
             </Button>
@@ -279,13 +291,7 @@ export default function AdminSchedulePage() {
             <Badge variant="secondary" className="px-3 py-1.5">
               Editing Mode
             </Badge>
-            {hasChanges && (
-              <Button variant="outline" onClick={() => setHasChanges(false)}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Draft
-              </Button>
-            )}
-            <Button onClick={() => setShowPreview(true)}>
+            <Button onClick={() => setShowPreview(true)} disabled={publishing}>
               <Send className="h-4 w-4 mr-2" />
               Publish Changes
             </Button>
@@ -294,7 +300,7 @@ export default function AdminSchedulePage() {
       </div>
 
       {/* Pre-generation state */}
-      {!generated && !isGenerating && (
+      {!generated && !generating && (
         <>
           {/* Requirements Check */}
           <Card>
@@ -304,34 +310,44 @@ export default function AdminSchedulePage() {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-lg border">
                 <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <span className="text-sm">Pre-voting closed</span>
+                  {sessions.length > 0 ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  )}
+                  <span className="text-sm">Sessions approved ({sessions.length} sessions)</span>
                 </div>
-                <Badge variant="success">Complete</Badge>
+                <Badge variant={sessions.length > 0 ? 'success' : 'secondary'}>
+                  {sessions.length > 0 ? 'Complete' : 'Pending'}
+                </Badge>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg border">
                 <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <span className="text-sm">Sessions approved ({initialSessions.length} sessions)</span>
-                </div>
-                <Badge variant="success">Complete</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  {venues.length > 0 ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  )}
                   <span className="text-sm">Venues configured ({venues.length} rooms)</span>
                 </div>
-                <Badge variant="success">Complete</Badge>
+                <Badge variant={venues.length > 0 ? 'success' : 'secondary'}>
+                  {venues.length > 0 ? 'Complete' : 'Pending'}
+                </Badge>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg border">
                 <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  {timeSlots.filter(t => t.type === 'session').length > 0 ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  )}
                   <span className="text-sm">Time slots defined ({timeSlots.filter(t => t.type === 'session').length} slots)</span>
                 </div>
-                <Badge variant="success">Complete</Badge>
+                <Badge variant={timeSlots.filter(t => t.type === 'session').length > 0 ? 'success' : 'secondary'}>
+                  {timeSlots.filter(t => t.type === 'session').length > 0 ? 'Complete' : 'Pending'}
+                </Badge>
               </div>
             </CardContent>
           </Card>
@@ -401,7 +417,7 @@ export default function AdminSchedulePage() {
       )}
 
       {/* Generating state */}
-      {isGenerating && (
+      {generating && (
         <Card className="p-8">
           <div className="space-y-6 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
@@ -433,7 +449,7 @@ export default function AdminSchedulePage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-4">
-                  <div className="text-3xl font-bold">87</div>
+                  <div className="text-3xl font-bold">{Math.round(qualityScore)}</div>
                   <div>
                     <div className="text-sm font-medium">Quality Score</div>
                     <div className="text-xs text-muted-foreground">Out of 100</div>
@@ -514,9 +530,12 @@ export default function AdminSchedulePage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <div className="min-w-[900px]">
+                <div style={{ minWidth: `${100 + venues.length * 200}px` }}>
                   {/* Header Row */}
-                  <div className="grid grid-cols-[100px_repeat(4,1fr)] border-b bg-muted/50">
+                  <div
+                    className="border-b bg-muted/50"
+                    style={{ display: 'grid', gridTemplateColumns: `100px repeat(${venues.length}, 1fr)` }}
+                  >
                     <div className="p-3 border-r" />
                     {venues.map((venue) => (
                       <div key={venue.id} className="p-3 border-r last:border-r-0 text-center">
@@ -533,7 +552,8 @@ export default function AdminSchedulePage() {
                   {timeSlots.map((slot) => (
                     <div
                       key={slot.id}
-                      className="grid grid-cols-[100px_repeat(4,1fr)] border-b last:border-b-0"
+                      className="border-b last:border-b-0"
+                      style={{ display: 'grid', gridTemplateColumns: `100px repeat(${venues.length}, 1fr)` }}
                     >
                       {/* Time Column */}
                       <div className="p-3 border-r bg-muted/30">
@@ -543,7 +563,10 @@ export default function AdminSchedulePage() {
 
                       {/* Venue Columns */}
                       {slot.type === 'locked' ? (
-                        <div className="col-span-4 p-3 bg-muted/20 flex items-center justify-center">
+                        <div
+                          className="p-3 bg-muted/20 flex items-center justify-center"
+                          style={{ gridColumn: `span ${venues.length}` }}
+                        >
                           <span className="text-sm text-muted-foreground font-medium">
                             {slot.label}
                           </span>
