@@ -7,8 +7,7 @@ import { TabsNav } from '@/components/layout/tabs-nav'
 import { Container } from '@/components/layout/container'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { Badge } from '@/components/ui/badge'
-import { useEvent } from '@/hooks/use-event'
-import { useAuth } from '@/hooks'
+import { useEvent, useAuth, useVotes } from '@/hooks'
 
 const tabs = [
   {
@@ -105,14 +104,15 @@ export default function EventLayout({
   // Fetch event data and user info
   const { event, votingConfig, loading: eventLoading, error: eventError } = useEvent()
   const { user, loading: authLoading, signOut } = useAuth()
+  const { balance, loading: votesLoading } = useVotes()
 
   // Calculate event status
   const eventStatus = getEventStatus(event, votingConfig)
 
-  // Mock credits for now (will be from user's voting credits later)
+  // Get credits from votes balance (or voting config default)
   const credits = {
-    total: votingConfig?.preVoteCredits || 100,
-    spent: 0, // Will be calculated from user's votes
+    total: balance.totalCredits || votingConfig?.preVoteCredits || 100,
+    spent: balance.creditsSpent || 0,
   }
 
   const statusLabels = {
@@ -131,7 +131,7 @@ export default function EventLayout({
     concluded: 'muted',
   } as const
 
-  // Loading state
+  // Loading state (don't wait for votes to show UI)
   if (eventLoading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -163,7 +163,7 @@ export default function EventLayout({
     <div className="min-h-screen flex flex-col">
       <Navbar
         eventName={event?.name || 'Event'}
-        user={user ? { name: user.email || 'User' } : null}
+        user={user ? { name: user.email || 'User' } : undefined}
         credits={credits}
         onSignOut={signOut}
       />
