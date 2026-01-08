@@ -3,12 +3,12 @@
  */
 
 export const testEvent = {
-  slug: 'ethdenver-2025',
-  name: 'ETHDenver 2025',
-  description: 'The largest Ethereum hackathon and unconference',
-  location: 'Denver, Colorado',
-  startDate: '2025-02-27',
-  endDate: '2025-03-01',
+  slug: 'ethboulder-2026',
+  name: 'ETH Boulder 2026',
+  description: 'Ethereum community event in Boulder, Colorado',
+  location: 'Boulder, Colorado',
+  startDate: '2026-06-01',
+  endDate: '2026-06-03',
 }
 
 export const testSessions = {
