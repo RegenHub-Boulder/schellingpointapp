@@ -3,10 +3,8 @@
 import * as React from 'react'
 import {
   User,
-  MapPin,
   Mail,
   Search,
-  Filter,
   Download,
   UserPlus,
   MoreVertical,
@@ -14,6 +12,10 @@ import {
   Trash2,
   Ban,
   CheckCircle,
+  ShieldCheck,
+  Loader2,
+  AlertTriangle,
+  Wallet,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,136 +26,75 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-
-interface Participant {
-  id: number
-  name: string
-  email: string
-  avatar?: string
-  location?: string
-  role?: string
-  joinedDate: string
-  status: 'active' | 'inactive' | 'banned'
-  stats: {
-    sessionsProposed: number
-    votesCast: number
-    creditsSpent: number
-    sessionsAttending: number
-    lastActive: string
-  }
-}
+import { useParticipants, Participant } from '@/hooks/use-participants'
+import { useEvent } from '@/hooks/use-event'
 
 export default function AdminParticipantsPage() {
+  const { event, loading: eventLoading } = useEvent()
+  const { participants, loading: participantsLoading, error } = useParticipants()
+
   const [searchQuery, setSearchQuery] = React.useState('')
-  const [statusFilter, setStatusFilter] = React.useState<string>('all')
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'checked-in' | 'not-checked-in' | 'admins'>('all')
 
-  // Mock data - in real app, this would come from API
-  const participants: Participant[] = [
-    {
-      id: 1,
-      name: 'Alice Chen',
-      email: 'alice.chen@example.com',
-      avatar: '',
-      location: 'San Francisco, CA',
-      role: 'Product Designer @ Consensus Labs',
-      joinedDate: '2024-01-15',
-      status: 'active',
-      stats: {
-        sessionsProposed: 2,
-        votesCast: 24,
-        creditsSpent: 67,
-        sessionsAttending: 8,
-        lastActive: '2 hours ago',
-      },
-    },
-    {
-      id: 2,
-      name: 'Bob Martinez',
-      email: 'bob.martinez@example.com',
-      avatar: '',
-      location: 'Austin, TX',
-      role: 'Blockchain Engineer @ Ethereum Foundation',
-      joinedDate: '2024-01-20',
-      status: 'active',
-      stats: {
-        sessionsProposed: 3,
-        votesCast: 18,
-        creditsSpent: 45,
-        sessionsAttending: 12,
-        lastActive: '1 day ago',
-      },
-    },
-    {
-      id: 3,
-      name: 'Carol Zhang',
-      email: 'carol.zhang@example.com',
-      avatar: '',
-      location: 'New York, NY',
-      role: 'Community Lead @ MetaGov',
-      joinedDate: '2024-01-10',
-      status: 'active',
-      stats: {
-        sessionsProposed: 1,
-        votesCast: 32,
-        creditsSpent: 89,
-        sessionsAttending: 15,
-        lastActive: '30 mins ago',
-      },
-    },
-    {
-      id: 4,
-      name: 'David Kim',
-      email: 'david.kim@example.com',
-      avatar: '',
-      location: 'London, UK',
-      role: 'Researcher @ BlockScience',
-      joinedDate: '2024-02-01',
-      status: 'inactive',
-      stats: {
-        sessionsProposed: 0,
-        votesCast: 5,
-        creditsSpent: 12,
-        sessionsAttending: 2,
-        lastActive: '2 weeks ago',
-      },
-    },
-  ]
+  const loading = eventLoading || participantsLoading
 
-  const filteredParticipants = participants.filter((participant) => {
-    const matchesSearch =
-      searchQuery === '' ||
-      participant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      participant.email.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filter participants
+  const filteredParticipants = React.useMemo(() => {
+    return participants.filter((participant) => {
+      const searchLower = searchQuery.toLowerCase()
+      const matchesSearch =
+        searchQuery === '' ||
+        participant.user.displayName?.toLowerCase().includes(searchLower) ||
+        participant.user.email?.toLowerCase().includes(searchLower) ||
+        participant.user.walletAddress?.toLowerCase().includes(searchLower)
 
-    const matchesStatus =
-      statusFilter === 'all' || participant.status === statusFilter
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'checked-in' && participant.checkedIn) ||
+        (statusFilter === 'not-checked-in' && !participant.checkedIn) ||
+        (statusFilter === 'admins' && participant.isAdmin)
 
-    return matchesSearch && matchesStatus
-  })
+      return matchesSearch && matchesStatus
+    })
+  }, [participants, searchQuery, statusFilter])
 
-  const stats = {
-    total: participants.length,
-    active: participants.filter((p) => p.status === 'active').length,
-    inactive: participants.filter((p) => p.status === 'inactive').length,
-    banned: participants.filter((p) => p.status === 'banned').length,
+  // Stats
+  const stats = React.useMemo(() => {
+    return {
+      total: participants.length,
+      checkedIn: participants.filter((p) => p.checkedIn).length,
+      notCheckedIn: participants.filter((p) => !p.checkedIn).length,
+      admins: participants.filter((p) => p.isAdmin).length,
+    }
+  }, [participants])
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
-  const statusConfig = {
-    active: {
-      label: 'Active',
-      variant: 'default' as const,
-      icon: <CheckCircle className="h-3 w-3" />,
-    },
-    inactive: {
-      label: 'Inactive',
-      variant: 'secondary' as const,
-      icon: null,
-    },
-    banned: {
-      label: 'Banned',
-      variant: 'destructive' as const,
-      icon: <Ban className="h-3 w-3" />,
-    },
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Participants</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage event participants and their permissions
+          </p>
+        </div>
+        <Card className="p-6">
+          <div className="flex items-center gap-3 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <p>{error}</p>
+          </div>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -163,15 +104,15 @@ export default function AdminParticipantsPage() {
         <div>
           <h1 className="text-3xl font-bold">Participants</h1>
           <p className="text-muted-foreground mt-1">
-            Manage event participants and their permissions
+            {participants.length} registered for {event?.name || 'this event'}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" disabled>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button>
+          <Button disabled>
             <UserPlus className="h-4 w-4 mr-2" />
             Add Participant
           </Button>
@@ -181,20 +122,20 @@ export default function AdminParticipantsPage() {
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4">
-          <div className="text-sm font-medium text-muted-foreground">Total Participants</div>
+          <div className="text-sm font-medium text-muted-foreground">Total Registered</div>
           <div className="text-2xl font-bold mt-1">{stats.total}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm font-medium text-muted-foreground">Active</div>
-          <div className="text-2xl font-bold mt-1 text-success">{stats.active}</div>
+          <div className="text-sm font-medium text-muted-foreground">Checked In</div>
+          <div className="text-2xl font-bold mt-1 text-green-600">{stats.checkedIn}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm font-medium text-muted-foreground">Inactive</div>
-          <div className="text-2xl font-bold mt-1 text-muted-foreground">{stats.inactive}</div>
+          <div className="text-sm font-medium text-muted-foreground">Not Checked In</div>
+          <div className="text-2xl font-bold mt-1 text-muted-foreground">{stats.notCheckedIn}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm font-medium text-muted-foreground">Banned</div>
-          <div className="text-2xl font-bold mt-1 text-destructive">{stats.banned}</div>
+          <div className="text-sm font-medium text-muted-foreground">Organizers</div>
+          <div className="text-2xl font-bold mt-1 text-primary">{stats.admins}</div>
         </Card>
       </div>
 
@@ -204,13 +145,13 @@ export default function AdminParticipantsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search by name or email..."
+            placeholder="Search by name, email, or wallet..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-10 pl-10 pr-4 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={statusFilter === 'all' ? 'default' : 'outline'}
             size="sm"
@@ -219,18 +160,25 @@ export default function AdminParticipantsPage() {
             All
           </Button>
           <Button
-            variant={statusFilter === 'active' ? 'default' : 'outline'}
+            variant={statusFilter === 'checked-in' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setStatusFilter('active')}
+            onClick={() => setStatusFilter('checked-in')}
           >
-            Active
+            Checked In
           </Button>
           <Button
-            variant={statusFilter === 'inactive' ? 'default' : 'outline'}
+            variant={statusFilter === 'not-checked-in' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setStatusFilter('inactive')}
+            onClick={() => setStatusFilter('not-checked-in')}
           >
-            Inactive
+            Not Checked In
+          </Button>
+          <Button
+            variant={statusFilter === 'admins' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter('admins')}
+          >
+            Organizers
           </Button>
         </div>
       </div>
@@ -248,10 +196,7 @@ export default function AdminParticipantsPage() {
                   Contact
                 </th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">
-                  Joined
-                </th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">
-                  Activity
+                  Granted
                 </th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">
                   Status
@@ -262,17 +207,21 @@ export default function AdminParticipantsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredParticipants.map((participant) => {
-                const statusInfo = statusConfig[participant.status]
+              {filteredParticipants.map((participant, index) => {
+                const displayName = participant.user.displayName || participant.user.email || 'Anonymous'
+                const truncatedWallet = participant.user.walletAddress
+                  ? `${participant.user.walletAddress.slice(0, 6)}...${participant.user.walletAddress.slice(-4)}`
+                  : null
+
                 return (
-                  <tr key={participant.id} className="border-b last:border-0 hover:bg-muted/50">
+                  <tr key={participant.user.id || index} className="border-b last:border-0 hover:bg-muted/50">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          {participant.avatar ? (
+                          {participant.user.avatar ? (
                             <img
-                              src={participant.avatar}
-                              alt={participant.name}
+                              src={participant.user.avatar}
+                              alt={displayName}
                               className="h-full w-full rounded-full object-cover"
                             />
                           ) : (
@@ -280,10 +229,18 @@ export default function AdminParticipantsPage() {
                           )}
                         </div>
                         <div>
-                          <div className="font-medium">{participant.name}</div>
-                          {participant.role && (
-                            <div className="text-xs text-muted-foreground truncate max-w-xs">
-                              {participant.role}
+                          <div className="font-medium flex items-center gap-2">
+                            {displayName}
+                            {participant.isAdmin && (
+                              <Badge variant="default" className="text-xs">
+                                <ShieldCheck className="h-3 w-3 mr-1" />
+                                Admin
+                              </Badge>
+                            )}
+                          </div>
+                          {participant.burnerCardId && (
+                            <div className="text-xs text-muted-foreground">
+                              Card: {participant.burnerCardId}
                             </div>
                           )}
                         </div>
@@ -291,38 +248,39 @@ export default function AdminParticipantsPage() {
                     </td>
                     <td className="p-4">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-sm">
-                          <Mail className="h-3 w-3 text-muted-foreground" />
-                          <span className="truncate max-w-xs">{participant.email}</span>
-                        </div>
-                        {participant.location && (
+                        {participant.user.email && (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Mail className="h-3 w-3 text-muted-foreground" />
+                            <span className="truncate max-w-xs">{participant.user.email}</span>
+                          </div>
+                        )}
+                        {truncatedWallet && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            <span>{participant.location}</span>
+                            <Wallet className="h-3 w-3" />
+                            <span className="font-mono">{truncatedWallet}</span>
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="p-4 text-sm">{participant.joinedDate}</td>
-                    <td className="p-4">
-                      <div className="space-y-1 text-xs">
-                        <div>
-                          <span className="font-medium">{participant.stats.sessionsProposed}</span>{' '}
-                          sessions
-                        </div>
-                        <div>
-                          <span className="font-medium">{participant.stats.votesCast}</span> votes
-                        </div>
-                        <div className="text-muted-foreground">
-                          Last: {participant.stats.lastActive}
-                        </div>
-                      </div>
+                    <td className="p-4 text-sm">
+                      {new Date(participant.grantedAt).toLocaleDateString()}
                     </td>
                     <td className="p-4">
-                      <Badge variant={statusInfo.variant} className="flex items-center gap-1 w-fit">
-                        {statusInfo.icon}
-                        {statusInfo.label}
-                      </Badge>
+                      {participant.checkedIn ? (
+                        <Badge className="bg-green-500 flex items-center gap-1 w-fit">
+                          <CheckCircle className="h-3 w-3" />
+                          Checked In
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                          Not Checked In
+                        </Badge>
+                      )}
+                      {participant.checkedInAt && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {new Date(participant.checkedInAt).toLocaleString()}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       <DropdownMenu>
@@ -332,23 +290,23 @@ export default function AdminParticipantsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem disabled>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem disabled>
                             <User className="h-4 w-4 mr-2" />
                             View Profile
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem disabled>
                             <Mail className="h-4 w-4 mr-2" />
                             Send Email
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">
+                          <DropdownMenuItem className="text-destructive" disabled>
                             <Ban className="h-4 w-4 mr-2" />
-                            Ban User
+                            Revoke Access
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">
+                          <DropdownMenuItem className="text-destructive" disabled>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete
                           </DropdownMenuItem>
@@ -364,7 +322,7 @@ export default function AdminParticipantsPage() {
       </Card>
 
       {/* Empty State */}
-      {filteredParticipants.length === 0 && (
+      {filteredParticipants.length === 0 && participants.length > 0 && (
         <div className="text-center py-12">
           <div className="flex justify-center mb-4">
             <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
@@ -375,6 +333,25 @@ export default function AdminParticipantsPage() {
           <p className="text-muted-foreground">
             Try adjusting your search or filter criteria
           </p>
+        </div>
+      )}
+
+      {/* No participants */}
+      {participants.length === 0 && (
+        <div className="text-center py-12">
+          <div className="flex justify-center mb-4">
+            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+              <User className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </div>
+          <h3 className="text-lg font-semibold mb-2">No participants yet</h3>
+          <p className="text-muted-foreground mb-4">
+            Grant access to participants to get started
+          </p>
+          <Button disabled>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add First Participant
+          </Button>
         </div>
       )}
     </div>

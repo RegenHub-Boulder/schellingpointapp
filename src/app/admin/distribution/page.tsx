@@ -1,41 +1,188 @@
 'use client'
 
 import * as React from 'react'
-import { DollarSign, Users, Vote, CheckCircle, ExternalLink, Loader2 } from 'lucide-react'
+import { DollarSign, Users, Vote, CheckCircle, ExternalLink, Loader2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { cn, formatCurrency, formatPercentage, truncateAddress } from '@/lib/utils'
+import { formatCurrency, truncateAddress } from '@/lib/utils'
+import { useEvent } from '@/hooks/use-event'
+import { useSessions, Session } from '@/hooks/use-sessions'
 
-// Mock data
-const distributionData = [
-  { session: 'DAO Governance', hosts: ['Alice Chen', 'Bob Smith'], votes: 156, voters: 52, qfScore: 18.4, amount: 1748 },
-  { session: 'ZK Workshop', hosts: ['Carol Williams'], votes: 134, voters: 38, qfScore: 14.2, amount: 1349 },
-  { session: 'Future of L2s', hosts: ['David Lee'], votes: 98, voters: 41, qfScore: 11.8, amount: 1121 },
-  { session: 'Privacy Panel', hosts: ['Eve Martinez', 'Frank Johnson'], votes: 89, voters: 35, qfScore: 10.1, amount: 960 },
-  { session: 'MEV Deep Dive', hosts: ['Grace Liu'], votes: 76, voters: 28, qfScore: 8.7, amount: 827 },
-  { session: 'Smart Contract Security', hosts: ['Henry Park'], votes: 71, voters: 26, qfScore: 7.9, amount: 751 },
-  { session: 'ReFi Discussion', hosts: ['Iris Chen'], votes: 67, voters: 24, qfScore: 7.2, amount: 684 },
-  { session: 'Wallet UX', hosts: ['Jack Miller'], votes: 52, voters: 21, qfScore: 5.8, amount: 551 },
-]
+interface DistributionRow {
+  session: Session
+  votes: number
+  voters: number
+  qfScore: number
+  amount: number
+  hosts: string[]
+}
 
 export default function AdminDistributionPage() {
+  const { event, budgetConfig, loading: eventLoading, error: eventError } = useEvent()
+  const { sessions, loading: sessionsLoading, error: sessionsError } = useSessions({ status: 'scheduled' })
+
   const [isExecuting, setIsExecuting] = React.useState(false)
   const [executed, setExecuted] = React.useState(false)
   const [confirmed, setConfirmed] = React.useState(false)
 
-  const totalPool = 10000
-  const platformFee = 500
+  const loading = eventLoading || sessionsLoading
+  const error = eventError || sessionsError
+
+  // Calculate distribution data from sessions
+  const distributionData = React.useMemo((): DistributionRow[] => {
+    if (!sessions.length || !budgetConfig) return []
+
+    // Filter sessions that have attendance stats
+    const sessionsWithStats = sessions.filter(s =>
+      s.attendanceStats && s.attendanceStats.totalVotes > 0
+    )
+
+    // Calculate total QF score
+    const totalQfScore = sessionsWithStats.reduce(
+      (sum, s) => sum + (s.attendanceStats?.qfScore || 0),
+      0
+    )
+
+    if (totalQfScore === 0) return []
+
+    // Calculate distributable amount
+    const platformFeePercent = budgetConfig.platformFeePercent || 5
+    const distributable = budgetConfig.totalBudgetPool * (1 - platformFeePercent / 100)
+
+    // Calculate distribution for each session
+    return sessionsWithStats
+      .map(session => {
+        const qfScore = session.attendanceStats?.qfScore || 0
+        const proportion = qfScore / totalQfScore
+        const amount = Math.round(distributable * proportion)
+
+        const hosts = session.hosts?.map(h => h.name || 'Unknown').filter(Boolean) || []
+
+        return {
+          session,
+          votes: session.attendanceStats?.totalVotes || 0,
+          voters: session.preVoteStats?.totalVoters || 0,
+          qfScore: Math.round(proportion * 1000) / 10, // As percentage with 1 decimal
+          amount,
+          hosts,
+        }
+      })
+      .sort((a, b) => b.qfScore - a.qfScore)
+  }, [sessions, budgetConfig])
+
+  // Calculate totals
+  const totalPool = budgetConfig?.totalBudgetPool || 0
+  const platformFeePercent = budgetConfig?.platformFeePercent || 5
+  const platformFee = Math.round(totalPool * platformFeePercent / 100)
   const distributable = totalPool - platformFee
   const totalDistributed = distributionData.reduce((sum, d) => sum + d.amount, 0)
 
+  // Get unique hosts count
+  const uniqueHosts = new Set(distributionData.flatMap(d => d.hosts))
+
+  // Voting stats
+  const totalVotesCast = distributionData.reduce((sum, d) => sum + d.votes, 0)
+  const totalVoters = new Set(sessions.flatMap(s => s.preVoteStats?.totalVoters || 0))
+
   const handleExecute = () => {
     setIsExecuting(true)
+    // In production, this would call an API to execute the distribution
     setTimeout(() => {
       setIsExecuting(false)
       setExecuted(true)
     }, 3000)
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Budget Distribution</h1>
+          <p className="text-muted-foreground mt-1">
+            Distribute session budget based on attendance votes
+          </p>
+        </div>
+        <Card className="p-6">
+          <div className="flex items-center gap-3 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <p>Error loading distribution data: {error}</p>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  // No budget configured
+  if (!budgetConfig || totalPool === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Budget Distribution</h1>
+          <p className="text-muted-foreground mt-1">
+            Distribute session budget based on attendance votes
+          </p>
+        </div>
+        <Card className="p-12 text-center">
+          <DollarSign className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+          <h2 className="text-lg font-medium mb-2">No Budget Configured</h2>
+          <p className="text-muted-foreground">
+            Configure a budget pool in event settings before distributing funds.
+          </p>
+        </Card>
+      </div>
+    )
+  }
+
+  // No attendance votes yet
+  if (distributionData.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Budget Distribution</h1>
+          <p className="text-muted-foreground mt-1">
+            Distribute session budget based on attendance votes
+          </p>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Pool
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(totalPool)}</div>
+              <div className="text-xs text-muted-foreground">
+                {budgetConfig.paymentTokenSymbol || 'USDC'}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="p-12 text-center">
+          <Vote className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+          <h2 className="text-lg font-medium mb-2">No Attendance Votes Yet</h2>
+          <p className="text-muted-foreground">
+            Distribution will be available after sessions receive attendance votes.
+          </p>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -46,14 +193,15 @@ export default function AdminDistributionPage() {
           <h1 className="text-2xl font-bold">Budget Distribution</h1>
           <p className="text-muted-foreground mt-1">
             Distribute session budget based on attendance votes
+            {event?.name && ` for ${event.name}`}
           </p>
         </div>
 
         {!executed && (
-          <Badge variant="secondary">Event Concluded</Badge>
+          <Badge variant="secondary">Ready to Distribute</Badge>
         )}
         {executed && (
-          <Badge variant="success">Distribution Complete</Badge>
+          <Badge className="bg-green-500">Distribution Complete</Badge>
         )}
       </div>
 
@@ -68,14 +216,16 @@ export default function AdminDistributionPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalPool)}</div>
-            <div className="text-xs text-muted-foreground">USDC</div>
+            <div className="text-xs text-muted-foreground">
+              {budgetConfig.paymentTokenSymbol || 'USDC'}
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Platform Fee (5%)
+              Platform Fee ({platformFeePercent}%)
             </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -106,8 +256,8 @@ export default function AdminDistributionPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">28</div>
-            <div className="text-xs text-muted-foreground">Unique wallets</div>
+            <div className="text-2xl font-bold">{uniqueHosts.size}</div>
+            <div className="text-xs text-muted-foreground">Unique hosts</div>
           </CardContent>
         </Card>
       </div>
@@ -119,17 +269,22 @@ export default function AdminDistributionPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
           <div>
-            <div className="text-sm text-muted-foreground">Participation</div>
-            <div className="text-lg font-semibold mt-1">142 / 156 (91%)</div>
-            <Progress value={91} className="mt-2" />
+            <div className="text-sm text-muted-foreground">Sessions with Votes</div>
+            <div className="text-lg font-semibold mt-1">
+              {distributionData.length} / {sessions.length}
+            </div>
+            <Progress
+              value={(distributionData.length / Math.max(sessions.length, 1)) * 100}
+              className="mt-2"
+            />
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Total Votes Cast</div>
-            <div className="text-lg font-semibold mt-1">847</div>
+            <div className="text-lg font-semibold mt-1">{totalVotesCast.toLocaleString()}</div>
           </div>
           <div>
-            <div className="text-sm text-muted-foreground">Total Credits Spent</div>
-            <div className="text-lg font-semibold mt-1">3,284</div>
+            <div className="text-sm text-muted-foreground">Total to Distribute</div>
+            <div className="text-lg font-semibold mt-1">{formatCurrency(totalDistributed)}</div>
           </div>
         </CardContent>
       </Card>
@@ -156,10 +311,7 @@ export default function AdminDistributionPage() {
                   Votes
                 </th>
                 <th className="text-right text-xs font-medium text-muted-foreground px-4 py-3">
-                  Voters
-                </th>
-                <th className="text-right text-xs font-medium text-muted-foreground px-4 py-3">
-                  QF Score
+                  QF Share
                 </th>
                 <th className="text-right text-xs font-medium text-muted-foreground px-4 py-3">
                   Payout
@@ -168,21 +320,18 @@ export default function AdminDistributionPage() {
             </thead>
             <tbody className="divide-y">
               {distributionData.map((row, i) => (
-                <tr key={i} className="hover:bg-muted/30">
+                <tr key={row.session.id} className="hover:bg-muted/30">
                   <td className="px-4 py-3 text-sm text-muted-foreground font-mono">
                     {i + 1}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-sm">{row.session}</div>
+                    <div className="font-medium text-sm">{row.session.title}</div>
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {row.hosts.join(', ')}
+                    {row.hosts.length > 0 ? row.hosts.join(', ') : 'No hosts'}
                   </td>
                   <td className="px-4 py-3 text-sm text-right font-mono">
                     {row.votes}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right font-mono">
-                    {row.voters}
                   </td>
                   <td className="px-4 py-3 text-sm text-right font-mono">
                     {row.qfScore}%
@@ -197,7 +346,7 @@ export default function AdminDistributionPage() {
             </tbody>
             <tfoot className="bg-muted/30 border-t">
               <tr>
-                <td colSpan={6} className="px-4 py-3 font-medium text-sm text-right">
+                <td colSpan={5} className="px-4 py-3 font-medium text-sm text-right">
                   Total Distribution
                 </td>
                 <td className="px-4 py-3 text-right font-bold">
@@ -217,7 +366,8 @@ export default function AdminDistributionPage() {
               <div className="space-y-1">
                 <h3 className="font-semibold">Ready to distribute</h3>
                 <p className="text-sm text-muted-foreground">
-                  {formatCurrency(distributable)} to 28 wallets on Base network
+                  {formatCurrency(distributable)} to {uniqueHosts.size} hosts
+                  {budgetConfig.treasuryWalletAddress && ' on Base network'}
                 </p>
               </div>
 
@@ -254,7 +404,7 @@ export default function AdminDistributionPage() {
               <div className="flex-1">
                 <h3 className="font-semibold text-green-900">Distribution Complete</h3>
                 <p className="text-sm text-green-700 mt-1">
-                  {formatCurrency(distributable)} distributed to 28 hosts
+                  {formatCurrency(distributable)} distributed to {uniqueHosts.size} hosts
                 </p>
 
                 <div className="mt-4 p-3 rounded-lg bg-white/50">
