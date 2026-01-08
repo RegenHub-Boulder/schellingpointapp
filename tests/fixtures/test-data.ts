@@ -62,26 +62,26 @@ export const testVenues = {
 
 export const testTimeSlots = {
   morning1: {
-    startTime: '2025-02-27T09:00:00Z',
-    endTime: '2025-02-27T10:00:00Z',
+    startTime: '2026-03-01T09:00:00Z',
+    endTime: '2026-03-01T10:00:00Z',
     label: 'Morning Session 1',
     isAvailable: true,
   },
   morning2: {
-    startTime: '2025-02-27T10:15:00Z',
-    endTime: '2025-02-27T11:15:00Z',
+    startTime: '2026-03-01T10:15:00Z',
+    endTime: '2026-03-01T11:15:00Z',
     label: 'Morning Session 2',
     isAvailable: true,
   },
   lunch: {
-    startTime: '2025-02-27T12:00:00Z',
-    endTime: '2025-02-27T13:00:00Z',
+    startTime: '2026-03-01T12:00:00Z',
+    endTime: '2026-03-01T13:00:00Z',
     label: 'Lunch Break',
     isAvailable: false,
   },
   afternoon: {
-    startTime: '2025-02-27T13:00:00Z',
-    endTime: '2025-02-27T14:30:00Z',
+    startTime: '2026-03-01T13:00:00Z',
+    endTime: '2026-03-01T14:30:00Z',
     label: 'Afternoon Session',
     isAvailable: true,
   },

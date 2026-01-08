@@ -214,7 +214,7 @@ export class ApiHelper {
     email: string
     isAdmin?: boolean
   }) {
-    const response = await this.request.post(`${this.baseUrl}/api/events/${slug}/access`, {
+    const response = await this.request.post(`${this.baseUrl}/api/events/${slug}/access/grant`, {
       headers: this.getHeaders(),
       data: accessData,
     })

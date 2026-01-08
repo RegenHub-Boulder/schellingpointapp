@@ -3,7 +3,7 @@ import { Page, expect, APIRequestContext } from '@playwright/test'
 // Event slug used for testing
 export const TEST_EVENT_SLUG = process.env.TEST_EVENT_SLUG || 'ethboulder-2026'
 
-// Base URL for API requests
+// Base URL for API requests (port 3333 is configured in next.config.js)
 export const API_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3333'
 
 /**

@@ -8,15 +8,10 @@ test.describe('Access API', () => {
     api = new ApiHelper(request)
   })
 
-  test.describe('GET /api/events/:slug/access', () => {
-    test('returns 401 without authentication', async () => {
-      const { response } = await api.getAccess()
+  // Note: GET /api/events/:slug/access endpoint doesn't exist in current API
+  // Access list is retrieved via /api/events/:slug/participants for admins
 
-      expectStatus(response, 401)
-    })
-  })
-
-  test.describe('POST /api/events/:slug/access', () => {
+  test.describe('POST /api/events/:slug/access/grant', () => {
     test('returns 401 without authentication', async () => {
       const { response } = await api.grantAccess(undefined, {
         email: 'test@example.com',
@@ -111,8 +106,10 @@ test.describe('RLS Policy Tests', () => {
       expectStatus(response, 401)
     })
 
-    test('access list requires authentication', async () => {
-      const { response } = await api.getAccess()
+    test('granting access requires authentication', async () => {
+      const { response } = await api.grantAccess(undefined, {
+        email: 'test@example.com',
+      })
 
       expectStatus(response, 401)
     })
