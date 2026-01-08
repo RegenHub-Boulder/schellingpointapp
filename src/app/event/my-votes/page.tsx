@@ -1,46 +1,17 @@
 'use client'
 
 import * as React from 'react'
-import { Mic, Wrench, MessageSquare, Users, Monitor, Minus, Plus } from 'lucide-react'
+import Link from 'next/link'
+import { Mic, Wrench, MessageSquare, Users, Monitor, Minus, Plus, Loader2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { VoteDots } from '@/components/voting/vote-dots'
 import { cn, calculateQuadraticCost } from '@/lib/utils'
+import { useVotes } from '@/hooks/use-votes'
+import { useAuth } from '@/hooks'
 
-// Mock data
-const mockVotes = [
-  {
-    id: '1',
-    title: 'Building DAOs That Actually Work',
-    format: 'talk' as const,
-    host: 'Alice Chen',
-    votes: 3,
-  },
-  {
-    id: '2',
-    title: 'Zero-Knowledge Proofs Workshop',
-    format: 'workshop' as const,
-    host: 'Bob Smith',
-    votes: 1,
-  },
-  {
-    id: '3',
-    title: 'The Future of Regenerative Finance',
-    format: 'discussion' as const,
-    host: 'Carol Williams',
-    votes: 2,
-  },
-  {
-    id: '4',
-    title: 'MEV Deep Dive',
-    format: 'talk' as const,
-    host: 'David Lee',
-    votes: 2,
-  },
-]
-
-const formatIcons = {
+const formatIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   talk: Mic,
   workshop: Wrench,
   discussion: MessageSquare,
@@ -49,30 +20,78 @@ const formatIcons = {
 }
 
 export default function MyVotesPage() {
-  const [votes, setVotes] = React.useState(mockVotes)
+  const { user } = useAuth()
+  const { votes, balance, loading, error, castVote, refetch } = useVotes()
+  const [updatingVote, setUpdatingVote] = React.useState<string | null>(null)
 
-  const totalCredits = 100
-  const spentCredits = votes.reduce((sum, v) => sum + calculateQuadraticCost(v.votes), 0)
-  const remainingCredits = totalCredits - spentCredits
+  const totalCredits = balance.totalCredits
+  const spentCredits = balance.creditsSpent
+  const remainingCredits = balance.creditsRemaining
 
-  const handleVoteChange = (id: string, delta: number) => {
-    setVotes((prev) =>
-      prev.map((v) => {
-        if (v.id !== id) return v
+  const handleVoteChange = async (sessionId: string, currentVotes: number, delta: number) => {
+    const newVotes = Math.max(0, currentVotes + delta)
 
-        const newVotes = Math.max(0, v.votes + delta)
-        const currentCost = calculateQuadraticCost(v.votes)
-        const newCost = calculateQuadraticCost(newVotes)
-        const costDiff = newCost - currentCost
+    // Check if we can afford the increase
+    if (delta > 0) {
+      const currentCost = calculateQuadraticCost(currentVotes)
+      const newCost = calculateQuadraticCost(newVotes)
+      const costDiff = newCost - currentCost
+      if (costDiff > remainingCredits) return
+    }
 
-        if (delta > 0 && costDiff > remainingCredits) return v
-        return { ...v, votes: newVotes }
-      })
+    setUpdatingVote(sessionId)
+    const result = await castVote(sessionId, newVotes)
+    setUpdatingVote(null)
+
+    if (!result.success) {
+      console.error('Failed to update vote:', result.error)
+    }
+  }
+
+  // Filter to only show sessions with votes
+  const votedSessions = votes.filter((v) => v.voteCount > 0)
+  const totalVotes = votedSessions.reduce((sum, v) => sum + v.voteCount, 0)
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     )
   }
 
-  const votedSessions = votes.filter((v) => v.votes > 0)
-  const totalVotes = votedSessions.reduce((sum, v) => sum + v.votes, 0)
+  // Not authenticated
+  if (!user) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Your Vote Portfolio</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage how you've allocated your pre-event votes
+          </p>
+        </div>
+        <Card className="p-12 text-center">
+          <p className="text-muted-foreground mb-4">
+            Sign in to view and manage your votes.
+          </p>
+          <Button asChild>
+            <Link href="/">Sign In</Link>
+          </Button>
+        </Card>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">Failed to load votes: {error}</p>
+        <Button onClick={() => refetch()}>Try again</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -111,25 +130,34 @@ export default function MyVotesPage() {
 
           <div className="space-y-3">
             {votedSessions.map((vote) => {
-              const FormatIcon = formatIcons[vote.format]
-              const credits = calculateQuadraticCost(vote.votes)
-              const nextCost = calculateQuadraticCost(vote.votes + 1) - credits
+              const format = vote.session?.format || 'talk'
+              const FormatIcon = formatIcons[format] || Mic
+              const credits = calculateQuadraticCost(vote.voteCount)
+              const nextCost = calculateQuadraticCost(vote.voteCount + 1) - credits
               const canAdd = nextCost <= remainingCredits
+              const isUpdating = updatingVote === vote.sessionId
 
               return (
-                <Card key={vote.id} className="p-4">
+                <Card key={vote.sessionId} className="p-4">
                   <div className="flex items-center gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                         <FormatIcon className="h-4 w-4" />
-                        <span>{vote.host}</span>
+                        <span className="capitalize">{format}</span>
+                        <span>•</span>
+                        <span>{vote.session?.duration || 60} min</span>
                       </div>
-                      <h3 className="font-medium truncate">{vote.title}</h3>
+                      <Link
+                        href={`/event/sessions/${vote.sessionId}`}
+                        className="font-medium truncate hover:underline block"
+                      >
+                        {vote.session?.title || 'Unknown Session'}
+                      </Link>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <VoteDots votes={vote.votes} maxDisplay={6} />
+                        <VoteDots votes={vote.voteCount} maxDisplay={6} />
                         <div className="text-xs text-muted-foreground mt-1 tabular-nums">
                           {credits} credits
                         </div>
@@ -139,18 +167,26 @@ export default function MyVotesPage() {
                         <Button
                           variant="outline"
                           size="icon-sm"
-                          onClick={() => handleVoteChange(vote.id, -1)}
-                          disabled={vote.votes === 0}
+                          onClick={() => handleVoteChange(vote.sessionId, vote.voteCount, -1)}
+                          disabled={vote.voteCount === 0 || isUpdating}
                         >
-                          <Minus className="h-3 w-3" />
+                          {isUpdating ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Minus className="h-3 w-3" />
+                          )}
                         </Button>
                         <Button
                           variant="outline"
                           size="icon-sm"
-                          onClick={() => handleVoteChange(vote.id, 1)}
-                          disabled={!canAdd}
+                          onClick={() => handleVoteChange(vote.sessionId, vote.voteCount, 1)}
+                          disabled={!canAdd || isUpdating}
                         >
-                          <Plus className="h-3 w-3" />
+                          {isUpdating ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -165,12 +201,14 @@ export default function MyVotesPage() {
           <p className="text-muted-foreground mb-4">
             You haven't voted on any sessions yet.
           </p>
-          <Button>Browse Sessions</Button>
+          <Button asChild>
+            <Link href="/event/sessions">Browse Sessions</Link>
+          </Button>
         </Card>
       )}
 
       {/* Tip */}
-      {remainingCredits > 50 && (
+      {remainingCredits > 50 && votedSessions.length > 0 && (
         <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
           <p className="text-sm">
             <span className="font-medium">Tip:</span>{' '}

@@ -2,60 +2,15 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Heart, Calendar, MapPin, Clock, Mic, Wrench, MessageSquare, Users, Monitor } from 'lucide-react'
+import { ArrowLeft, Heart, Calendar, MapPin, Clock, Mic, Wrench, MessageSquare, Users, Monitor, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import { SessionTrack, trackConfig } from '@/types'
+import { useSessions, Session } from '@/hooks/use-sessions'
+import { useFavorites } from '@/hooks/use-favorites'
+import { useEvent } from '@/hooks/use-event'
 
-// Mock favorited sessions with schedule info
-const mockFavoritedSessions = [
-  {
-    id: '1',
-    title: 'Building DAOs That Actually Work',
-    description: 'We\'ll explore practical governance frameworks that have worked for DAOs at different scales.',
-    format: 'talk' as const,
-    duration: 60,
-    host: { name: 'Alice Chen' },
-    tags: ['Governance', 'DAOs'],
-    track: 'governance' as SessionTrack,
-    venue: 'Main Hall',
-    startTime: '9:45 AM',
-    endTime: '10:45 AM',
-    day: 'Day 1 - March 15',
-  },
-  {
-    id: '3',
-    title: 'The Future of Regenerative Finance',
-    description: 'A facilitated discussion on how ReFi can scale beyond carbon credits.',
-    format: 'discussion' as const,
-    duration: 60,
-    host: { name: 'Carol Williams' },
-    tags: ['ReFi', 'Sustainability'],
-    track: 'sustainability' as SessionTrack,
-    venue: 'Breakout Room A',
-    startTime: '2:00 PM',
-    endTime: '3:00 PM',
-    day: 'Day 1 - March 15',
-  },
-  {
-    id: '5',
-    title: 'Layer 2 Scaling Solutions Panel',
-    description: 'Representatives from various L2 solutions discuss trade-offs and roadmaps.',
-    format: 'panel' as const,
-    duration: 90,
-    host: { name: 'Eve Martinez' },
-    tags: ['Layer 2', 'Scaling'],
-    track: 'technical' as SessionTrack,
-    venue: 'Main Hall',
-    startTime: '10:00 AM',
-    endTime: '11:30 AM',
-    day: 'Day 2 - March 16',
-  },
-]
-
-const formatIcons = {
+const formatIcons: Record<string, React.ElementType> = {
   talk: Mic,
   workshop: Wrench,
   discussion: MessageSquare,
@@ -63,26 +18,77 @@ const formatIcons = {
   demo: Monitor,
 }
 
+const formatLabels: Record<string, string> = {
+  talk: 'Talk',
+  workshop: 'Workshop',
+  discussion: 'Discussion',
+  panel: 'Panel',
+  demo: 'Demo',
+}
+
 export default function MySchedulePage() {
-  const [sessions, setSessions] = React.useState(mockFavoritedSessions)
+  const { event, loading: eventLoading } = useEvent()
+  // Fetch scheduled sessions (those that have been assigned to the schedule)
+  const { sessions: allSessions, loading: sessionsLoading } = useSessions({ status: 'scheduled' })
+  const { favorites, removeFavorite } = useFavorites()
+
+  const loading = eventLoading || sessionsLoading
+
+  // Filter to only favorited sessions
+  const favoritedSessions = React.useMemo(() => {
+    return allSessions.filter(session => favorites.has(session.id))
+  }, [allSessions, favorites])
+
+  // Group sessions by day (using time slot date)
+  const sessionsByDay = React.useMemo(() => {
+    const grouped: Record<string, Session[]> = {}
+
+    favoritedSessions.forEach(session => {
+      if (session.timeSlot?.start_time) {
+        const date = new Date(session.timeSlot.start_time)
+        const dayKey = date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
+        })
+        if (!grouped[dayKey]) {
+          grouped[dayKey] = []
+        }
+        grouped[dayKey].push(session)
+      } else {
+        // Sessions without time slots go in "Unscheduled"
+        if (!grouped['Unscheduled']) {
+          grouped['Unscheduled'] = []
+        }
+        grouped['Unscheduled'].push(session)
+      }
+    })
+
+    // Sort sessions within each day by start time
+    Object.keys(grouped).forEach(day => {
+      grouped[day].sort((a, b) => {
+        const aTime = a.timeSlot?.start_time || ''
+        const bTime = b.timeSlot?.start_time || ''
+        return aTime.localeCompare(bTime)
+      })
+    })
+
+    return grouped
+  }, [favoritedSessions])
 
   const handleRemoveFavorite = (sessionId: string) => {
-    setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+    removeFavorite(sessionId)
   }
 
-  // Group sessions by day
-  const sessionsByDay = sessions.reduce((acc, session) => {
-    if (!acc[session.day]) {
-      acc[session.day] = []
-    }
-    acc[session.day].push(session)
-    return acc
-  }, {} as Record<string, typeof sessions>)
-
-  // Sort sessions within each day by start time
-  Object.keys(sessionsByDay).forEach((day) => {
-    sessionsByDay[day].sort((a, b) => a.startTime.localeCompare(b.startTime))
-  })
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -96,12 +102,13 @@ export default function MySchedulePage() {
         <div>
           <h1 className="text-2xl font-bold">My Schedule</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {sessions.length} session{sessions.length !== 1 ? 's' : ''} saved
+            {favoritedSessions.length} session{favoritedSessions.length !== 1 ? 's' : ''} saved
+            {event?.name && ` for ${event.name}`}
           </p>
         </div>
       </div>
 
-      {sessions.length === 0 ? (
+      {favoritedSessions.length === 0 ? (
         <div className="text-center py-16">
           <Heart className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
           <h2 className="text-lg font-medium mb-2">No sessions saved yet</h2>
@@ -123,24 +130,29 @@ export default function MySchedulePage() {
 
               <div className="space-y-3">
                 {daySessions.map((session) => {
-                  const FormatIcon = formatIcons[session.format]
-                  const trackInfo = trackConfig[session.track]
+                  const FormatIcon = formatIcons[session.format] || Mic
+                  const primaryHost = session.hosts?.find(h => h.isPrimary) || session.hosts?.[0]
+
+                  const startTime = session.timeSlot?.start_time
+                    ? new Date(session.timeSlot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : 'TBD'
+                  const endTime = session.timeSlot?.end_time
+                    ? new Date(session.timeSlot.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : 'TBD'
 
                   return (
                     <Card key={session.id} className="p-4">
                       <div className="flex gap-4">
                         {/* Time column */}
                         <div className="flex-shrink-0 w-20 text-center">
-                          <div className="text-sm font-medium">{session.startTime}</div>
+                          <div className="text-sm font-medium">{startTime}</div>
                           <div className="text-xs text-muted-foreground">
                             {session.duration} min
                           </div>
                         </div>
 
-                        {/* Track indicator */}
-                        <div
-                          className={cn('w-1 rounded-full', trackInfo.color)}
-                        />
+                        {/* Format indicator */}
+                        <div className="w-1 rounded-full bg-primary/30" />
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
@@ -148,12 +160,19 @@ export default function MySchedulePage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                                 <FormatIcon className="h-4 w-4" />
-                                <span>{trackInfo.label}</span>
+                                <span>{formatLabels[session.format] || session.format}</span>
                               </div>
-                              <h3 className="font-semibold">{session.title}</h3>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {session.host.name}
-                              </p>
+                              <Link
+                                href={`/event/sessions/${session.id}`}
+                                className="font-semibold hover:underline"
+                              >
+                                {session.title}
+                              </Link>
+                              {primaryHost && (
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {primaryHost.name}
+                                </p>
+                              )}
                             </div>
 
                             <button
@@ -166,19 +185,21 @@ export default function MySchedulePage() {
                           </div>
 
                           <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
-                              {session.venue}
-                            </div>
+                            {session.venue && (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                {session.venue.name}
+                              </div>
+                            )}
                             <div className="flex items-center gap-1">
                               <Clock className="h-4 w-4" />
-                              {session.startTime} - {session.endTime}
+                              {startTime} - {endTime}
                             </div>
                           </div>
 
-                          {session.tags.length > 0 && (
+                          {session.topicTags && session.topicTags.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-3">
-                              {session.tags.map((tag) => (
+                              {session.topicTags.map((tag) => (
                                 <Badge key={tag} variant="secondary" className="text-xs">
                                   {tag}
                                 </Badge>
@@ -197,10 +218,14 @@ export default function MySchedulePage() {
       )}
 
       {/* Export / Share */}
-      {sessions.length > 0 && (
+      {favoritedSessions.length > 0 && (
         <div className="flex justify-center gap-3 pt-4">
-          <Button variant="outline">Export to Calendar</Button>
-          <Button variant="outline">Share Schedule</Button>
+          <Button variant="outline" disabled>
+            Export to Calendar
+          </Button>
+          <Button variant="outline" disabled>
+            Share Schedule
+          </Button>
         </div>
       )}
     </div>

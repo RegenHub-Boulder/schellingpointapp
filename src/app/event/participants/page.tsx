@@ -5,183 +5,102 @@ import {
   User,
   MapPin,
   Briefcase,
-  Twitter,
-  Linkedin,
-  Github,
-  Globe,
   Mail,
-  MessageCircle,
+  Wallet,
   Search,
-  Filter,
+  Loader2,
+  ShieldCheck,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Lock,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-
-interface Participant {
-  id: number
-  name: string
-  avatar?: string
-  bio: string
-  location?: string
-  role?: string
-  interests: string[]
-  socials: {
-    twitter?: string
-    linkedin?: string
-    github?: string
-    website?: string
-    email?: string
-  }
-  stats: {
-    sessionsProposed: number
-    votesCast: number
-    sessionsAttending: number
-  }
-}
+import { useParticipants, Participant } from '@/hooks/use-participants'
+import { useEvent } from '@/hooks/use-event'
 
 export default function ParticipantsPage() {
+  const { event, loading: eventLoading } = useEvent()
+  const { participants, loading: participantsLoading, error } = useParticipants()
+
   const [searchQuery, setSearchQuery] = React.useState('')
-  const [selectedInterest, setSelectedInterest] = React.useState<string | null>(null)
+  const [filter, setFilter] = React.useState<'all' | 'checked-in' | 'admins'>('all')
 
-  // Mock data - in real app, this would come from API
-  const participants: Participant[] = [
-    {
-      id: 1,
-      name: 'Alice Chen',
-      avatar: '',
-      bio: 'Product designer passionate about decentralized governance and community-driven decision making.',
-      location: 'San Francisco, CA',
-      role: 'Product Designer @ Consensus Labs',
-      interests: ['DAOs', 'Governance', 'UX Design', 'Web3'],
-      socials: {
-        twitter: '@alicechen',
-        linkedin: 'alicechen',
-        github: 'alicechen',
-        website: 'alicechen.design',
-        email: 'alice@example.com',
-      },
-      stats: {
-        sessionsProposed: 2,
-        votesCast: 24,
-        sessionsAttending: 8,
-      },
-    },
-    {
-      id: 2,
-      name: 'Bob Martinez',
-      avatar: '',
-      bio: 'Smart contract developer and blockchain educator. Building tools for the next generation of decentralized apps.',
-      location: 'Austin, TX',
-      role: 'Blockchain Engineer @ Ethereum Foundation',
-      interests: ['Smart Contracts', 'Solidity', 'DeFi', 'Security'],
-      socials: {
-        twitter: '@bobmartinez',
-        github: 'bobdev',
-        email: 'bob@example.com',
-      },
-      stats: {
-        sessionsProposed: 3,
-        votesCast: 18,
-        sessionsAttending: 12,
-      },
-    },
-    {
-      id: 3,
-      name: 'Carol Zhang',
-      avatar: '',
-      bio: 'Community organizer and DAO strategist. Helping communities coordinate and make better collective decisions.',
-      location: 'New York, NY',
-      role: 'Community Lead @ MetaGov',
-      interests: ['Community Building', 'DAOs', 'Quadratic Voting', 'Coordination'],
-      socials: {
-        twitter: '@carolzhang',
-        linkedin: 'carolzhang',
-        website: 'carol.xyz',
-      },
-      stats: {
-        sessionsProposed: 1,
-        votesCast: 32,
-        sessionsAttending: 15,
-      },
-    },
-    {
-      id: 4,
-      name: 'David Kim',
-      avatar: '',
-      bio: 'Cryptoeconomics researcher focused on mechanism design and incentive alignment.',
-      location: 'London, UK',
-      role: 'Researcher @ BlockScience',
-      interests: ['Mechanism Design', 'Game Theory', 'Token Economics', 'Governance'],
-      socials: {
-        twitter: '@davidkim',
-        github: 'dkim-research',
-        email: 'david@example.com',
-      },
-      stats: {
-        sessionsProposed: 4,
-        votesCast: 28,
-        sessionsAttending: 10,
-      },
-    },
-    {
-      id: 5,
-      name: 'Emma Wilson',
-      avatar: '',
-      bio: 'Full-stack developer building the future of decentralized social networks.',
-      location: 'Berlin, Germany',
-      role: 'Engineer @ Lens Protocol',
-      interests: ['Social Networks', 'Privacy', 'Web3', 'Open Source'],
-      socials: {
-        github: 'emmawilson',
-        twitter: '@emmawilson',
-        website: 'emma.dev',
-      },
-      stats: {
-        sessionsProposed: 2,
-        votesCast: 21,
-        sessionsAttending: 9,
-      },
-    },
-    {
-      id: 6,
-      name: 'Frank Rodriguez',
-      avatar: '',
-      bio: 'Legal expert specializing in DAO governance and decentralized organizational structures.',
-      location: 'Miami, FL',
-      role: 'Legal Counsel @ a16z crypto',
-      interests: ['Legal', 'Compliance', 'DAOs', 'Governance'],
-      socials: {
-        linkedin: 'frankrodriguez',
-        twitter: '@frankrodriguez',
-        email: 'frank@example.com',
-      },
-      stats: {
-        sessionsProposed: 1,
-        votesCast: 15,
-        sessionsAttending: 7,
-      },
-    },
-  ]
-
-  // Get all unique interests for filter
-  const allInterests = Array.from(
-    new Set(participants.flatMap((p) => p.interests))
-  ).sort()
+  const loading = eventLoading || participantsLoading
 
   // Filter participants
-  const filteredParticipants = participants.filter((participant) => {
-    const matchesSearch =
-      searchQuery === '' ||
-      participant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      participant.bio.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      participant.role?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredParticipants = React.useMemo(() => {
+    return participants.filter((participant) => {
+      // Search filter
+      const searchLower = searchQuery.toLowerCase()
+      const matchesSearch =
+        searchQuery === '' ||
+        participant.user.displayName?.toLowerCase().includes(searchLower) ||
+        participant.user.email?.toLowerCase().includes(searchLower) ||
+        participant.user.walletAddress?.toLowerCase().includes(searchLower)
 
-    const matchesInterest =
-      !selectedInterest || participant.interests.includes(selectedInterest)
+      // Status filter
+      const matchesFilter =
+        filter === 'all' ||
+        (filter === 'checked-in' && participant.checkedIn) ||
+        (filter === 'admins' && participant.isAdmin)
 
-    return matchesSearch && matchesInterest
-  })
+      return matchesSearch && matchesFilter
+    })
+  }, [participants, searchQuery, filter])
+
+  // Stats
+  const stats = React.useMemo(() => {
+    return {
+      total: participants.length,
+      checkedIn: participants.filter(p => p.checkedIn).length,
+      admins: participants.filter(p => p.isAdmin).length,
+    }
+  }, [participants])
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Error state (including auth errors)
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Participants</h1>
+          <p className="text-muted-foreground mt-1">
+            {event?.name || 'Event'} attendees
+          </p>
+        </div>
+
+        <Card className="p-12">
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                <Lock className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Access Restricted</h3>
+            <p className="text-muted-foreground mb-4">
+              {error}
+            </p>
+            {error.includes('sign in') && (
+              <Button asChild>
+                <a href="/auth">Sign In</a>
+              </Button>
+            )}
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -189,8 +108,39 @@ export default function ParticipantsPage() {
       <div>
         <h1 className="text-3xl font-bold">Participants</h1>
         <p className="text-muted-foreground mt-1">
-          Connect with {participants.length} attendees at the event
+          {stats.total} registered attendees for {event?.name || 'this event'}
         </p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <User className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-2xl font-bold">{stats.total}</p>
+              <p className="text-xs text-muted-foreground">Total Registered</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="h-5 w-5 text-success" />
+            <div>
+              <p className="text-2xl font-bold">{stats.checkedIn}</p>
+              <p className="text-xs text-muted-foreground">Checked In</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-2xl font-bold">{stats.admins}</p>
+              <p className="text-xs text-muted-foreground">Organizers</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Search and Filters */}
@@ -199,148 +149,46 @@ export default function ParticipantsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search by name, role, or bio..."
+            placeholder="Search by name, email, or wallet..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-10 pl-10 pr-4 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2">
           <Button
-            variant={selectedInterest === null ? 'default' : 'outline'}
+            variant={filter === 'all' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setSelectedInterest(null)}
+            onClick={() => setFilter('all')}
           >
             All
           </Button>
-          {allInterests.slice(0, 6).map((interest) => (
-            <Button
-              key={interest}
-              variant={selectedInterest === interest ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedInterest(interest)}
-              className="whitespace-nowrap"
-            >
-              {interest}
-            </Button>
-          ))}
+          <Button
+            variant={filter === 'checked-in' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilter('checked-in')}
+          >
+            Checked In
+          </Button>
+          <Button
+            variant={filter === 'admins' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilter('admins')}
+          >
+            Organizers
+          </Button>
         </div>
       </div>
 
       {/* Participants Grid */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredParticipants.map((participant) => (
-          <Card key={participant.id} className="p-6 hover:shadow-lg transition-shadow">
-            {/* Avatar and Name */}
-            <div className="flex items-start gap-4 mb-4">
-              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                {participant.avatar ? (
-                  <img
-                    src={participant.avatar}
-                    alt={participant.name}
-                    className="h-full w-full rounded-full object-cover"
-                  />
-                ) : (
-                  <User className="h-8 w-8 text-muted-foreground" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-lg">{participant.name}</h3>
-                {participant.role && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                    <Briefcase className="h-3 w-3" />
-                    <span className="truncate">{participant.role}</span>
-                  </div>
-                )}
-                {participant.location && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                    <MapPin className="h-3 w-3" />
-                    <span>{participant.location}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bio */}
-            <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
-              {participant.bio}
-            </p>
-
-            {/* Interests */}
-            <div className="flex flex-wrap gap-1 mb-4">
-              {participant.interests.slice(0, 4).map((interest) => (
-                <Badge key={interest} variant="secondary" className="text-xs">
-                  {interest}
-                </Badge>
-              ))}
-              {participant.interests.length > 4 && (
-                <Badge variant="secondary" className="text-xs">
-                  +{participant.interests.length - 4}
-                </Badge>
-              )}
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-2 mb-4 text-center text-xs">
-              <div className="p-2 bg-muted/50 rounded">
-                <div className="font-bold">{participant.stats.sessionsProposed}</div>
-                <div className="text-muted-foreground">Proposed</div>
-              </div>
-              <div className="p-2 bg-muted/50 rounded">
-                <div className="font-bold">{participant.stats.votesCast}</div>
-                <div className="text-muted-foreground">Votes</div>
-              </div>
-              <div className="p-2 bg-muted/50 rounded">
-                <div className="font-bold">{participant.stats.sessionsAttending}</div>
-                <div className="text-muted-foreground">Attending</div>
-              </div>
-            </div>
-
-            {/* Social Links */}
-            <div className="flex items-center gap-2 mb-4">
-              {participant.socials.twitter && (
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Twitter className="h-4 w-4" />
-                </Button>
-              )}
-              {participant.socials.linkedin && (
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Linkedin className="h-4 w-4" />
-                </Button>
-              )}
-              {participant.socials.github && (
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Github className="h-4 w-4" />
-                </Button>
-              )}
-              {participant.socials.website && (
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Globe className="h-4 w-4" />
-                </Button>
-              )}
-              {participant.socials.email && (
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Mail className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1">
-                <MessageCircle className="h-3 w-3 mr-1" />
-                Message
-              </Button>
-              <Button variant="outline" size="sm" className="flex-1">
-                View Profile
-              </Button>
-            </div>
-          </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filteredParticipants.map((participant, index) => (
+          <ParticipantCard key={participant.user.id || index} participant={participant} />
         ))}
       </div>
 
       {/* Empty State */}
-      {filteredParticipants.length === 0 && (
+      {filteredParticipants.length === 0 && participants.length > 0 && (
         <Card className="p-12">
           <div className="text-center">
             <div className="flex justify-center mb-4">
@@ -355,6 +203,98 @@ export default function ParticipantsPage() {
           </div>
         </Card>
       )}
+
+      {/* No participants yet */}
+      {participants.length === 0 && (
+        <Card className="p-12">
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                <User className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold mb-2">No participants yet</h3>
+            <p className="text-muted-foreground">
+              Participants will appear here once they register for the event
+            </p>
+          </div>
+        </Card>
+      )}
     </div>
+  )
+}
+
+function ParticipantCard({ participant }: { participant: Participant }) {
+  const displayName = participant.user.displayName || participant.user.email || 'Anonymous'
+  const truncatedWallet = participant.user.walletAddress
+    ? `${participant.user.walletAddress.slice(0, 6)}...${participant.user.walletAddress.slice(-4)}`
+    : null
+
+  return (
+    <Card className="p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+          {participant.user.avatar ? (
+            <img
+              src={participant.user.avatar}
+              alt={displayName}
+              className="h-full w-full rounded-full object-cover"
+            />
+          ) : (
+            <User className="h-6 w-6 text-muted-foreground" />
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold truncate">{displayName}</h3>
+            {participant.isAdmin && (
+              <Badge variant="default" className="text-xs">
+                <ShieldCheck className="h-3 w-3 mr-1" />
+                Admin
+              </Badge>
+            )}
+          </div>
+
+          {participant.user.email && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+              <Mail className="h-3 w-3" />
+              <span className="truncate">{participant.user.email}</span>
+            </div>
+          )}
+
+          {truncatedWallet && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+              <Wallet className="h-3 w-3" />
+              <span className="font-mono">{truncatedWallet}</span>
+            </div>
+          )}
+
+          {/* Status */}
+          <div className="flex items-center gap-2 mt-2">
+            {participant.checkedIn ? (
+              <Badge variant="secondary" className="text-xs bg-success/10 text-success">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Checked In
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-xs">
+                <XCircle className="h-3 w-3 mr-1" />
+                Not Checked In
+              </Badge>
+            )}
+          </div>
+
+          {/* Check-in time */}
+          {participant.checkedInAt && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Checked in {new Date(participant.checkedInAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }

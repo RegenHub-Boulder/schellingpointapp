@@ -11,6 +11,7 @@ import { SessionCard } from '@/components/sessions/session-card'
 import { cn } from '@/lib/utils'
 import { useSessions, Session } from '@/hooks/use-sessions'
 import { useVotes } from '@/hooks/use-votes'
+import { useFavorites } from '@/hooks/use-favorites'
 import { useAuth } from '@/hooks'
 
 // Transform API session to UI format
@@ -64,8 +65,8 @@ export default function SessionsPage() {
   // Fetch user's votes
   const { balance, getVoteForSession, castVote } = useVotes()
 
-  // Local state for favorites (will be persisted later)
-  const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
+  // Favorites persisted to localStorage
+  const { favorites, isFavorited, toggleFavorite } = useFavorites()
 
   // Transform API sessions and add user votes
   const sessions = React.useMemo(() => {
@@ -75,10 +76,10 @@ export default function SessionsPage() {
       return {
         ...transformed,
         userVotes,
-        isFavorited: favorites.has(session.id),
+        isFavorited: isFavorited(session.id),
       }
     })
-  }, [apiSessions, getVoteForSession, favorites])
+  }, [apiSessions, getVoteForSession, isFavorited])
 
   const [search, setSearch] = React.useState('')
   const [format, setFormat] = React.useState('all')
@@ -107,15 +108,7 @@ export default function SessionsPage() {
   }
 
   const handleToggleFavorite = (sessionId: string) => {
-    setFavorites(prev => {
-      const next = new Set(prev)
-      if (next.has(sessionId)) {
-        next.delete(sessionId)
-      } else {
-        next.add(sessionId)
-      }
-      return next
-    })
+    toggleFavorite(sessionId)
   }
 
   // Filter and sort sessions
