@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks'
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, signOut, loading: authLoading } = useAuth()
+  const { user, logout, isLoading: authLoading } = useAuth()
   const { profile, loading: profileLoading, error, updateProfile } = useProfile()
 
   const [isEditing, setIsEditing] = React.useState(false)
@@ -78,7 +78,7 @@ export default function ProfilePage() {
   }
 
   const handleSignOut = async () => {
-    await signOut()
+    logout()
     router.push('/')
   }
 
