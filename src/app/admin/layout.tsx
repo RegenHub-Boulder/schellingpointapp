@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Presentation,
@@ -17,10 +17,12 @@ import {
   Smartphone,
   UserCheck,
   Star,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { getAssetPath } from '@/lib/asset-path'
+import { useAuth } from '@/hooks/useAuth'
 
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -44,6 +46,25 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const { isLoggedIn, isLoading: authLoading } = useAuth()
+
+  // Route protection: redirect to login if not authenticated
+  // TODO: Add admin role check once event_access.is_admin is integrated
+  React.useEffect(() => {
+    if (!authLoading && !isLoggedIn) {
+      router.replace('/login')
+    }
+  }, [authLoading, isLoggedIn, router])
+
+  // Show loading while checking auth or redirecting
+  if (authLoading || !isLoggedIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex">

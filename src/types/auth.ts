@@ -12,6 +12,7 @@ export interface AuthState {
   signerExpiry: number | null
   isLoading: boolean
   isLoggedIn: boolean
+  needsSignerRefresh: boolean
 }
 
 export interface AuthContextValue extends AuthState {

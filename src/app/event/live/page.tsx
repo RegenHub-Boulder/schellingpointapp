@@ -14,7 +14,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { useTimeSlots, TimeSlot } from '@/hooks/use-time-slots'
 import { useVotes } from '@/hooks/use-votes'
 import { useEvent } from '@/hooks/use-event'
-import { useVoting } from '@/hooks/useVoting'
+import { useVoting, getTopicId } from '@/hooks/useVoting'
 
 // Helper to check if a time slot is currently live
 function isLiveNow(timeSlot: TimeSlot): boolean {
@@ -117,8 +117,8 @@ export default function LiveVotingPage() {
 
     try {
       // Cast vote on-chain first
-      // TODO: Use session UUID hash as topicId instead of numeric ID
-      const txHash = await castOnChainVote(Number(liveSession.session.id), 1)
+      const topicId = getTopicId(liveSession.session.id)
+      const txHash = await castOnChainVote(topicId, 1)
       setLastTxHash(txHash)
 
       // Then update off-chain stats

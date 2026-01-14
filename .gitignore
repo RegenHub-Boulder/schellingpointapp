@@ -46,3 +46,7 @@ next-env.d.ts
 
 # server files (generated)
 /server/
+
+# Arbiter
+.claude/.arbiter-session.json
+.claude/arbiter.tmp.log

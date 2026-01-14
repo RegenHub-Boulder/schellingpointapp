@@ -46,6 +46,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const isLoggedIn = !!user && !!token && hasValidSigner
 
+  // Track if signer needs refresh (< 24 hours remaining)
+  const [needsSignerRefresh, setNeedsSignerRefresh] = React.useState(false)
+
   // Check for existing session on mount
   React.useEffect(() => {
     async function checkExistingSession() {
@@ -82,6 +85,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (sessionKey) {
             setSignerAddress(sessionKey.address)
             setSignerExpiry(sessionKey.expiry)
+
+            // Check if signer needs refresh (< 24 hours remaining)
+            const currentTime = Math.floor(Date.now() / 1000)
+            const twentyFourHours = 24 * 60 * 60
+            if (sessionKey.expiry - currentTime < twentyFourHours) {
+              console.log('Signer expiring soon, needs refresh')
+              setNeedsSignerRefresh(true)
+            }
           }
         } else {
           // Token invalid, clear storage
@@ -198,10 +209,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signerExpiry,
     isLoading,
     isLoggedIn,
+    needsSignerRefresh,
     login,
     logout,
     refreshUser
-  }), [user, token, signerAddress, signerExpiry, isLoading, isLoggedIn, login, logout, refreshUser])
+  }), [user, token, signerAddress, signerExpiry, isLoading, isLoggedIn, needsSignerRefresh, login, logout, refreshUser])
 
   return (
     <AuthContext.Provider value={value}>

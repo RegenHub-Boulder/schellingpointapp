@@ -11,6 +11,9 @@ contract SchellingPointVotes {
     // identityHash => nonce (replay protection)
     mapping(bytes32 => uint256) public nonces;
 
+    // identityHash => topicId => value (vote storage)
+    mapping(bytes32 => mapping(bytes32 => uint256)) public votes;
+
     event SignerAuthorized(
         bytes32 indexed identityHash,
         address indexed signer,
@@ -20,8 +23,8 @@ contract SchellingPointVotes {
     event Vote(
         bytes32 indexed identityHash,
         address indexed signer,
-        uint256 indexed topicId,
-        uint256 amount,
+        bytes32 indexed topicId,
+        uint256 value,
         uint256 nonce
     );
 
@@ -64,11 +67,16 @@ contract SchellingPointVotes {
     }
 
     /// @notice Cast a vote with authorized k1 signer
+    /// @param pubKey The passkey public key [x, y]
+    /// @param signer The authorized ephemeral signer
+    /// @param topicId The topic to vote on (keccak256 of session UUID)
+    /// @param value The vote value (0=remove, 1=favorite, 1-100=percentage)
+    /// @param sig The signature from the ephemeral signer
     function vote(
         uint256[2] calldata pubKey,
         address signer,
-        uint256 topicId,
-        uint256 amount,
+        bytes32 topicId,
+        uint256 value,
         bytes calldata sig
     ) external {
         bytes32 identityHash = keccak256(abi.encode(pubKey[0], pubKey[1]));
@@ -81,14 +89,73 @@ contract SchellingPointVotes {
             "vote",
             identityHash,
             topicId,
-            amount,
+            value,
             nonce,
             block.chainid,
             address(this)
         ));
         require(_recoverK1(message, sig) == signer, "invalid signer signature");
 
-        emit Vote(identityHash, signer, topicId, amount, nonce);
+        // Store the vote
+        votes[identityHash][topicId] = value;
+
+        emit Vote(identityHash, signer, topicId, value, nonce);
+    }
+
+    /// @notice Cast multiple votes in a single transaction
+    /// @param pubKey The passkey public key [x, y]
+    /// @param signer The authorized ephemeral signer
+    /// @param topicIds Array of topic IDs to vote on
+    /// @param values Array of vote values (must match topicIds length)
+    /// @param sig The signature from the ephemeral signer
+    function batchVote(
+        uint256[2] calldata pubKey,
+        address signer,
+        bytes32[] calldata topicIds,
+        uint256[] calldata values,
+        bytes calldata sig
+    ) external {
+        require(topicIds.length == values.length, "arrays length mismatch");
+        require(topicIds.length > 0, "empty arrays");
+
+        bytes32 identityHash = keccak256(abi.encode(pubKey[0], pubKey[1]));
+
+        require(signers[identityHash][signer] > block.timestamp, "signer not authorized");
+
+        uint256 nonce = nonces[identityHash]++;
+
+        // Build message for batch vote
+        bytes32 message = keccak256(abi.encode(
+            "batchVote",
+            identityHash,
+            keccak256(abi.encodePacked(topicIds)),
+            keccak256(abi.encodePacked(values)),
+            nonce,
+            block.chainid,
+            address(this)
+        ));
+        require(_recoverK1(message, sig) == signer, "invalid signer signature");
+
+        // Store all votes and emit events
+        for (uint256 i = 0; i < topicIds.length; i++) {
+            votes[identityHash][topicIds[i]] = values[i];
+            emit Vote(identityHash, signer, topicIds[i], values[i], nonce);
+        }
+    }
+
+    /// @notice Get votes for multiple topics
+    /// @param pubKey The passkey public key [x, y]
+    /// @param topicIds Array of topic IDs to query
+    /// @return values Array of vote values for each topic
+    function getVotes(
+        uint256[2] calldata pubKey,
+        bytes32[] calldata topicIds
+    ) external view returns (uint256[] memory values) {
+        bytes32 identityHash = keccak256(abi.encode(pubKey[0], pubKey[1]));
+        values = new uint256[](topicIds.length);
+        for (uint256 i = 0; i < topicIds.length; i++) {
+            values[i] = votes[identityHash][topicIds[i]];
+        }
     }
 
     /// @notice Get current nonce for an identity

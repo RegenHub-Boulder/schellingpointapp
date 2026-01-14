@@ -13,6 +13,7 @@ import { useSessions, Session } from '@/hooks/use-sessions'
 import { useVotes } from '@/hooks/use-votes'
 import { useFavorites } from '@/hooks/use-favorites'
 import { useAuth } from '@/hooks'
+import { useVoting, getTopicId } from '@/hooks/useVoting'
 
 // Transform API session to UI format
 function transformSession(session: Session) {
@@ -57,7 +58,7 @@ const sortOptions = [
 
 export default function SessionsPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoggedIn } = useAuth()
 
   // Fetch sessions with approved status (for public voting)
   const { sessions: apiSessions, loading, error, refetch: refetchSessions } = useSessions({ status: 'approved' })
@@ -65,8 +66,43 @@ export default function SessionsPage() {
   // Fetch user's votes
   const { balance, getVoteForSession, castVote } = useVotes()
 
-  // Favorites persisted to localStorage
+  // Favorites persisted to localStorage (fallback)
   const { favorites, isFavorited, toggleFavorite } = useFavorites()
+
+  // On-chain voting
+  const { castVote: castOnChainVote, getVotes, isVoting } = useVoting()
+
+  // On-chain favorites state (value=1 means favorited)
+  const [onChainFavorites, setOnChainFavorites] = React.useState<Record<string, number>>({})
+  const [loadingOnChainVotes, setLoadingOnChainVotes] = React.useState(false)
+
+  // Load on-chain votes when sessions load
+  React.useEffect(() => {
+    async function loadOnChainVotes() {
+      if (!isLoggedIn || apiSessions.length === 0) return
+
+      setLoadingOnChainVotes(true)
+      try {
+        const topicIds = apiSessions.map(s => getTopicId(s.id))
+        const votes = await getVotes(topicIds)
+        setOnChainFavorites(votes)
+      } catch (err) {
+        console.error('Failed to load on-chain votes:', err)
+      } finally {
+        setLoadingOnChainVotes(false)
+      }
+    }
+    loadOnChainVotes()
+  }, [apiSessions, isLoggedIn, getVotes])
+
+  // Check if session is favorited (on-chain or localStorage fallback)
+  const isSessionFavorited = React.useCallback((sessionId: string): boolean => {
+    if (isLoggedIn) {
+      const topicId = getTopicId(sessionId)
+      return onChainFavorites[topicId] === 1
+    }
+    return isFavorited(sessionId)
+  }, [isLoggedIn, onChainFavorites, isFavorited])
 
   // Transform API sessions and add user votes
   const sessions = React.useMemo(() => {
@@ -76,10 +112,10 @@ export default function SessionsPage() {
       return {
         ...transformed,
         userVotes,
-        isFavorited: isFavorited(session.id),
+        isFavorited: isSessionFavorited(session.id),
       }
     })
-  }, [apiSessions, getVoteForSession, isFavorited])
+  }, [apiSessions, getVoteForSession, isSessionFavorited])
 
   const [search, setSearch] = React.useState('')
   const [format, setFormat] = React.useState('all')
@@ -107,8 +143,33 @@ export default function SessionsPage() {
     }
   }
 
-  const handleToggleFavorite = (sessionId: string) => {
-    toggleFavorite(sessionId)
+  const handleToggleFavorite = async (sessionId: string) => {
+    if (!isLoggedIn) {
+      // Fallback to localStorage for non-logged-in users
+      toggleFavorite(sessionId)
+      return
+    }
+
+    const topicId = getTopicId(sessionId)
+    const currentValue = onChainFavorites[topicId] || 0
+    const newValue = currentValue === 1 ? 0 : 1
+
+    // Optimistically update UI
+    setOnChainFavorites(prev => ({
+      ...prev,
+      [topicId]: newValue
+    }))
+
+    try {
+      await castOnChainVote(topicId, newValue)
+    } catch (err) {
+      console.error('Failed to toggle favorite on-chain:', err)
+      // Revert on error
+      setOnChainFavorites(prev => ({
+        ...prev,
+        [topicId]: currentValue
+      }))
+    }
   }
 
   // Filter and sort sessions

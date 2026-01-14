@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { verifyJWT } from '@/lib/jwt'
 
 // PATCH /api/events/:slug/time-slots/:id - Update a time slot (admin only)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; id: string }> }
 ) {
+  // JWT validation
+  const authHeader = request.headers.get('Authorization')
+  const token = authHeader?.replace('Bearer ', '')
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+
   const { slug, id } = await params
   const body = await request.json()
   const supabase = await createClient()
@@ -126,6 +138,17 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; id: string }> }
 ) {
+  // JWT validation
+  const authHeader = request.headers.get('Authorization')
+  const token = authHeader?.replace('Bearer ', '')
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+
   const { slug, id } = await params
   const supabase = await createClient()
 

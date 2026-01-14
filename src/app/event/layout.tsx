@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { Presentation, Calendar, ClipboardList, Heart, BarChart3, FileText, Users, Loader2 } from 'lucide-react'
 import { Navbar } from '@/components/layout/navbar'
 import { TabsNav } from '@/components/layout/tabs-nav'
@@ -103,12 +104,21 @@ export default function EventLayout({
 }: {
   children: React.ReactNode
 }) {
+  const router = useRouter()
+
   // Fetch event data
   const { event, votingConfig, loading: eventLoading, error: eventError } = useEvent()
   const { balance, loading: votesLoading } = useVotes()
 
   // Passkey-based auth
   const { user: authUser, isLoggedIn, isLoading: authLoading, logout } = useAuth()
+
+  // Route protection: redirect to login if not authenticated
+  React.useEffect(() => {
+    if (!authLoading && !isLoggedIn) {
+      router.replace('/login')
+    }
+  }, [authLoading, isLoggedIn, router])
 
   // Calculate event status
   const eventStatus = getEventStatus(event, votingConfig)
@@ -141,7 +151,8 @@ export default function EventLayout({
   } as const
 
   // Loading state (don't wait for votes to show UI)
-  if (eventLoading || authLoading) {
+  // Also show loading while redirecting unauthenticated users
+  if (eventLoading || authLoading || !isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
