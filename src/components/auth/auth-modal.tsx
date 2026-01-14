@@ -72,7 +72,7 @@ export function AuthModal({ open, onOpenChange, eventName = 'the event' }: AuthM
             onClick={handleRegister}
           >
             <Mail className="h-5 w-5" />
-            <span className="flex-1 text-left">Register with invite code</span>
+            <span className="flex-1 text-left">Register with Email</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>

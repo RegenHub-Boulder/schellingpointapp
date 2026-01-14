@@ -49,64 +49,71 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Track if signer needs refresh (< 24 hours remaining)
   const [needsSignerRefresh, setNeedsSignerRefresh] = React.useState(false)
 
+  // Session checking logic - extracted so it can be called manually
+  const checkExistingSession = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // Check for stored token
+      const storedToken = localStorage.getItem('authToken')
+      if (!storedToken) {
+        return
+      }
+
+      // Check for stored session key (signer info is client-side)
+      const sessionData = localStorage.getItem('sessionKey')
+      let sessionKey: SessionKey | null = null
+      if (sessionData) {
+        try {
+          sessionKey = JSON.parse(sessionData)
+        } catch {
+          // Invalid session data
+        }
+      }
+
+      // Validate token with server
+      const response = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${storedToken}` }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setUser(data.user)
+        setToken(storedToken)
+
+        // Set signer info from localStorage (not server)
+        if (sessionKey) {
+          setSignerAddress(sessionKey.address)
+          setSignerExpiry(sessionKey.expiry)
+
+          // Check if signer needs refresh (< 24 hours remaining)
+          const currentTime = Math.floor(Date.now() / 1000)
+          const twentyFourHours = 24 * 60 * 60
+          if (sessionKey.expiry - currentTime < twentyFourHours) {
+            console.log('Signer expiring soon, needs refresh')
+            setNeedsSignerRefresh(true)
+          }
+        }
+      } else {
+        // Token invalid, clear storage
+        localStorage.removeItem('authToken')
+      }
+    } catch (error) {
+      console.error('Session check failed:', error)
+      localStorage.removeItem('authToken')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   // Check for existing session on mount
   React.useEffect(() => {
-    async function checkExistingSession() {
-      setIsLoading(true)
-      try {
-        // Check for stored token
-        const storedToken = localStorage.getItem('authToken')
-        if (!storedToken) {
-          return
-        }
-
-        // Check for stored session key (signer info is client-side)
-        const sessionData = localStorage.getItem('sessionKey')
-        let sessionKey: SessionKey | null = null
-        if (sessionData) {
-          try {
-            sessionKey = JSON.parse(sessionData)
-          } catch {
-            // Invalid session data
-          }
-        }
-
-        // Validate token with server
-        const response = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${storedToken}` }
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          setUser(data.user)
-          setToken(storedToken)
-
-          // Set signer info from localStorage (not server)
-          if (sessionKey) {
-            setSignerAddress(sessionKey.address)
-            setSignerExpiry(sessionKey.expiry)
-
-            // Check if signer needs refresh (< 24 hours remaining)
-            const currentTime = Math.floor(Date.now() / 1000)
-            const twentyFourHours = 24 * 60 * 60
-            if (sessionKey.expiry - currentTime < twentyFourHours) {
-              console.log('Signer expiring soon, needs refresh')
-              setNeedsSignerRefresh(true)
-            }
-          }
-        } else {
-          // Token invalid, clear storage
-          localStorage.removeItem('authToken')
-        }
-      } catch (error) {
-        console.error('Session check failed:', error)
-        localStorage.removeItem('authToken')
-      } finally {
-        setIsLoading(false)
-      }
-    }
     checkExistingSession()
-  }, [])
+  }, [checkExistingSession])
+
+  // Refresh session from localStorage (call after login/register completes)
+  const refreshSession = React.useCallback(async (): Promise<void> => {
+    await checkExistingSession()
+  }, [checkExistingSession])
 
   const login = React.useCallback(async (): Promise<void> => {
     // Get passkey and session key from localStorage
@@ -212,8 +219,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     needsSignerRefresh,
     login,
     logout,
-    refreshUser
-  }), [user, token, signerAddress, signerExpiry, isLoading, isLoggedIn, needsSignerRefresh, login, logout, refreshUser])
+    refreshUser,
+    refreshSession
+  }), [user, token, signerAddress, signerExpiry, isLoading, isLoggedIn, needsSignerRefresh, login, logout, refreshUser, refreshSession])
 
   return (
     <AuthContext.Provider value={value}>

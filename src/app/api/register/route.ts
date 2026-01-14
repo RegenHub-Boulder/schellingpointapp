@@ -1,26 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserByInviteCode, registerPasskey } from '@/lib/db/users'
+import { createClient } from '@/lib/supabase/server'
+import { getUserByEmail, createUser, registerPasskey } from '@/lib/db/users'
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate via Supabase session cookie
+    const supabase = await createClient()
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+
+    if (!supabaseUser?.email) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      )
+    }
+
+    const email = supabaseUser.email // Trusted from session
+
     const body = await request.json()
-    const { code, pubKeyX, pubKeyY, credentialId } = body
+    const { pubKeyX, pubKeyY, credentialId } = body
 
     // Validate input
-    if (!code || !pubKeyX || !pubKeyY || !credentialId) {
+    if (!pubKeyX || !pubKeyY || !credentialId) {
       return NextResponse.json(
-        { error: 'Missing required fields: code, pubKeyX, pubKeyY, credentialId' },
+        { error: 'Missing required fields: pubKeyX, pubKeyY, credentialId' },
         { status: 400 }
       )
     }
 
-    // Validate invite code and check if not already registered
-    const user = await getUserByInviteCode(code)
+    // Find or create user by email
+    let user = await getUserByEmail(email)
     if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid invite code or already used' },
-        { status: 401 }
-      )
+      user = await createUser(email)
     }
 
     // Register the passkey

@@ -11,7 +11,7 @@ import { useAuthFlow } from '@/hooks/useAuthFlow'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { isLoggedIn, user } = useAuth()
+  const { isLoggedIn, user, refreshSession } = useAuth()
   const { status, error, loginFlow, reset, isLoading } = useAuthFlow()
 
   const [isMounted, setIsMounted] = React.useState(false)
@@ -23,22 +23,19 @@ export default function LoginPage() {
     setHasLocalPasskey(!!localStorage.getItem('passkeyInfo'))
   }, [])
 
-  // Redirect if already logged in
+  // After auth flow completes, refresh session so AuthContext knows we're logged in
+  React.useEffect(() => {
+    if (status === 'success') {
+      refreshSession()
+    }
+  }, [status, refreshSession])
+
+  // Redirect when AuthContext confirms we're logged in
   React.useEffect(() => {
     if (isLoggedIn) {
       router.push('/event')
     }
   }, [isLoggedIn, router])
-
-  // Redirect on success
-  React.useEffect(() => {
-    if (status === 'success') {
-      const timer = setTimeout(() => {
-        router.push('/event')
-      }, 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [status, router])
 
   const handleLogin = async () => {
     try {

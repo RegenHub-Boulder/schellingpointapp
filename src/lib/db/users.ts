@@ -106,3 +106,29 @@ export async function getUserWithPasskeyByCredentialId(credentialId: string): Pr
     passkey: data
   }
 }
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email)
+    .single()
+
+  if (error || !data) return null
+  return data
+}
+
+export async function createUser(email: string): Promise<User> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('users')
+    .insert({ email })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create user: ${error?.message || 'Unknown error'}`)
+  }
+  return data
+}

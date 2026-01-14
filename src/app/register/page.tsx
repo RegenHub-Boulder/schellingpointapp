@@ -2,43 +2,97 @@
 
 import * as React from 'react'
 import { Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Fingerprint, CheckCircle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Fingerprint, CheckCircle, Mail, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Container } from '@/components/layout/container'
+import { Input } from '@/components/ui/input'
 import { extractPublicKey, arrayBufferToBase64Url } from '@/lib/webauthn'
 import { useAuthFlow } from '@/hooks/useAuthFlow'
+import { useAuth } from '@/contexts/AuthContext'
+import { createClient } from '@/lib/supabase/client'
+
+type PageMode = 'loading' | 'email' | 'email-sent' | 'passkey'
 
 function RegisterContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { status, error: authError, completeAuthFlow, isLoading: isAuthLoading } = useAuthFlow()
+  const { isLoggedIn, refreshSession } = useAuth()
+  const supabase = createClient()
 
+  const [mode, setMode] = React.useState<PageMode>('loading')
+  const [verifiedEmail, setVerifiedEmail] = React.useState<string | null>(null)
+  const [email, setEmail] = React.useState('')
+  const [isSendingEmail, setIsSendingEmail] = React.useState(false)
+  const [emailError, setEmailError] = React.useState<string | null>(null)
   const [isCreatingPasskey, setIsCreatingPasskey] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  const inviteCode = searchParams.get('code')
-
+  // Check for existing Supabase session on mount
   React.useEffect(() => {
-    if (!inviteCode) {
-      setError('No invite code provided')
-    }
-  }, [inviteCode])
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) {
+        setVerifiedEmail(user.email)
+        setMode('passkey')
+      } else {
+        setMode('email')
+      }
+    })
+  }, [supabase.auth])
 
-  // Redirect on success
+  // After auth flow completes, sign out of Supabase and refresh session
   React.useEffect(() => {
     if (status === 'success') {
-      const timer = setTimeout(() => {
-        router.push('/event')
-      }, 1000)
-      return () => clearTimeout(timer)
+      // Clean up Supabase session since we now use passkey auth
+      supabase.auth.signOut().then(() => {
+        refreshSession()
+      })
     }
-  }, [status, router])
+  }, [status, refreshSession, supabase.auth])
+
+  // Redirect only when AuthContext confirms we're logged in
+  React.useEffect(() => {
+    if (status === 'success' && isLoggedIn) {
+      router.push('/event')
+    }
+  }, [status, isLoggedIn, router])
+
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!email || !email.includes('@')) {
+      setEmailError('Please enter a valid email address')
+      return
+    }
+
+    setIsSendingEmail(true)
+    setEmailError(null)
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (error) {
+        throw error
+      }
+
+      setMode('email-sent')
+    } catch (err) {
+      console.error('Magic link error:', err)
+      setEmailError(err instanceof Error ? err.message : 'Failed to send magic link')
+    } finally {
+      setIsSendingEmail(false)
+    }
+  }
 
   const handleCreatePasskey = async () => {
-    if (!inviteCode) {
-      setError('No invite code provided')
+    if (!verifiedEmail) {
+      setError('Email not verified')
       return
     }
 
@@ -49,15 +103,15 @@ function RegisterContent() {
       // Step 1: Create WebAuthn passkey
       const credential = await navigator.credentials.create({
         publicKey: {
-          challenge: new Uint8Array(32), // In production, get this from server
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
           rp: {
             name: 'Schelling Point',
             id: window.location.hostname
           },
           user: {
-            id: new Uint8Array(16), // Random user ID
-            name: `user-${inviteCode}`,
-            displayName: `User ${inviteCode}`
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: verifiedEmail,
+            displayName: verifiedEmail.split('@')[0]
           },
           pubKeyCredParams: [
             {
@@ -93,7 +147,6 @@ function RegisterContent() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          code: inviteCode,
           pubKeyX,
           pubKeyY,
           credentialId
@@ -159,6 +212,125 @@ function RegisterContent() {
     return null
   }
 
+  // Loading state
+  if (mode === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Email input mode
+  if (mode === 'email') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <Container size="sm">
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <div className="rounded-full bg-primary/10 p-4">
+                  <Mail className="h-12 w-12 text-primary" />
+                </div>
+              </div>
+              <CardTitle className="text-2xl">Create Your Account</CardTitle>
+              <CardDescription>
+                Enter your email to get started
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {emailError && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+                  {emailError}
+                </div>
+              )}
+
+              <form onSubmit={handleSendMagicLink} className="space-y-4">
+                <div className="space-y-2">
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isSendingEmail}
+                    error={!!emailError}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  loading={isSendingEmail}
+                  disabled={isSendingEmail || !email}
+                >
+                  Send Magic Link
+                </Button>
+              </form>
+
+              <div className="text-xs text-center text-muted-foreground space-y-2">
+                <p>
+                  We'll send you a magic link to verify your email address.
+                </p>
+                <p>
+                  After verification, you'll create a passkey to secure your account.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Container>
+      </div>
+    )
+  }
+
+  // Email sent confirmation
+  if (mode === 'email-sent') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <Container size="sm">
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <div className="rounded-full bg-green-100 p-4">
+                  <CheckCircle className="h-12 w-12 text-green-600" />
+                </div>
+              </div>
+              <CardTitle className="text-2xl">Check Your Email</CardTitle>
+              <CardDescription>
+                We sent a magic link to <strong>{email}</strong>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-lg bg-muted p-4 text-sm text-center">
+                <p>Click the link in your email to continue registration.</p>
+                <p className="mt-2 text-muted-foreground">
+                  The link will expire in 1 hour.
+                </p>
+              </div>
+
+              <div className="text-xs text-center text-muted-foreground">
+                <p>
+                  Didn't receive the email? Check your spam folder or{' '}
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setMode('email')}
+                  >
+                    try again
+                  </button>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Container>
+      </div>
+    )
+  }
+
+  // Passkey creation mode
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
       <Container size="sm">
@@ -174,12 +346,12 @@ function RegisterContent() {
               </div>
             </div>
             <CardTitle className="text-2xl">
-              {status === 'success' ? 'Account Created!' : 'Create Your Account'}
+              {status === 'success' ? 'Account Created!' : 'Create Your Passkey'}
             </CardTitle>
             <CardDescription>
               {status === 'success'
                 ? 'Redirecting to event...'
-                : 'Register with Face ID or Touch ID to get started'
+                : 'Register with Face ID or Touch ID to complete setup'
               }
             </CardDescription>
           </CardHeader>
@@ -216,10 +388,10 @@ function RegisterContent() {
               </div>
             )}
 
-            {inviteCode && status !== 'success' && currentStep === 0 && (
+            {verifiedEmail && status !== 'success' && currentStep === 0 && (
               <div className="rounded-lg bg-muted p-4 text-sm">
-                <div className="font-medium mb-1">Invite Code</div>
-                <div className="font-mono text-muted-foreground">{inviteCode}</div>
+                <div className="font-medium mb-1">Email Verified</div>
+                <div className="text-muted-foreground">{verifiedEmail}</div>
               </div>
             )}
 
@@ -229,7 +401,7 @@ function RegisterContent() {
                 className="w-full"
                 onClick={handleCreatePasskey}
                 loading={isLoading}
-                disabled={!inviteCode || isLoading}
+                disabled={!verifiedEmail || isLoading}
               >
                 {getStatusMessage()}
               </Button>
@@ -254,7 +426,10 @@ export default function RegisterPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading...</span>
+        </div>
       </div>
     }>
       <RegisterContent />
