@@ -82,7 +82,10 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
       const queryString = params.toString()
       const url = `/api/events/${EVENT_SLUG}/sessions${queryString ? `?${queryString}` : ''}`
 
-      const response = await fetch(url)
+      const token = localStorage.getItem('authToken')
+      const response = await fetch(url, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
 
       if (!response.ok) {
         const data = await response.json()

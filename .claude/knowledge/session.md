@@ -432,3 +432,40 @@ File: `/src/app/login/page.tsx`
 **Files**: /src/contexts/AuthContext.tsx, /src/types/auth.ts, /src/hooks/useAuthFlow.ts, /src/app/layout.tsx, /src/app/providers.tsx, /src/app/event/layout.tsx, /src/app/admin/layout.tsx, /src/app/login/page.tsx
 ---
 
+### [21:53] [auth] Authentication Flow Architecture and Issues
+**Details**: The Schelling Point auth system has three separate flows:
+
+1. **Registration Flow** (/register?code=INVITE_CODE):
+   - User creates WebAuthn passkey
+   - POST /api/register stores passkey in DB, burns invite code
+   - Then calls completeAuthFlow() which: authorizes ephemeral signer (Gate 2 on-chain) → gets JWT (login)
+   - Success → redirects to /event/sessions
+   - Profile setup is NOT triggered automatically
+
+2. **Login Flow** (/login):
+   - Recovers passkey via discoverable credentials OR uses localStorage passkeyInfo
+   - Calls loginFlow() which: completeAuthFlow() (authorize signer → get JWT)
+   - Success → redirects to /event/sessions
+   - Profile setup is NOT triggered automatically
+
+3. **Landing Page Flow** (/):
+   - AuthModal has onComplete callback (never called - no handler in auth-modal.tsx)
+   - AuthModal buttons route directly: "Register with invite code" → /register, "Sign in with Passkey" → /login
+   - ProfileSetup modal on landing page is managed by authStep state but never triggered
+   - The auth-modal.tsx doesn't call its onComplete prop - it just routes away
+
+**Key Issues Found**:
+1. AuthModal.tsx never calls onComplete prop despite it being defined - just routes to /register or /login
+2. Auth-modal button text says "Register with invite code" but actually navigates to /register (confusing UX)
+3. No profile setup flow after registration - happens auto on landing page demo but NOT in register or login pages
+4. Post-auth routing goes directly to /event, bypassing profile setup entirely
+5. Profile setup component exists but only used on landing page demo, not in actual auth flow
+6. useAuthFlow.completeAuthFlow() completes both authorization AND login in one call, so user redirects immediately
+**Files**: src/app/page.tsx, src/app/register/page.tsx, src/app/login/page.tsx, src/components/auth/auth-modal.tsx, src/hooks/useAuthFlow.ts, src/contexts/AuthContext.tsx
+---
+
+### [22:00] [gotcha] Auth redirect race condition fix
+**Details**: The register and login pages had a race condition: useAuthFlow's status became 'success' and triggered redirect to /event before AuthContext had updated isLoggedIn. Event layout would then kick user back to /login. Fix: Added refreshSession() to AuthContext that re-reads localStorage and validates with API. Register/login pages now: (1) call refreshSession() when status='success', (2) only redirect when isLoggedIn is true.
+**Files**: src/contexts/AuthContext.tsx, src/app/register/page.tsx, src/app/login/page.tsx, src/types/auth.ts
+---
+

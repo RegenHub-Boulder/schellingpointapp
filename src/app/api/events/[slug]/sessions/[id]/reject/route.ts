@@ -20,16 +20,8 @@ export async function POST(
 
   const { slug, id } = await params
   const body = await request.json()
+  const userId = payload.sub as string
   const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
 
   // Validate rejection reason
   const { reason } = body
@@ -59,7 +51,7 @@ export async function POST(
     .from('event_access')
     .select('is_admin')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   if (!accessRecord?.is_admin) {

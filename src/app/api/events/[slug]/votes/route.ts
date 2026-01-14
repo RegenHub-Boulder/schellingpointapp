@@ -7,16 +7,16 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  // JWT validation
-  const authHeader = request.headers.get('Authorization')
-  const token = authHeader?.replace('Bearer ', '')
-  if (!token) {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const token = authHeader.slice(7)
   const payload = await verifyJWT(token)
   if (!payload) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const userId = payload.sub as string
 
   const { slug } = await params
   const body = await request.json()
@@ -37,15 +37,6 @@ export async function POST(
   }
 
   const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
 
   // Get the event
   const { data: event, error: eventError } = await supabase
@@ -100,7 +91,7 @@ export async function POST(
     .from('user_pre_vote_balance')
     .select('credits_spent, credits_remaining')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   // Get user's current vote on this session (if any)
@@ -109,7 +100,7 @@ export async function POST(
     .select('vote_count, credits_spent')
     .eq('event_id', event.id)
     .eq('session_id', sessionId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   const maxCredits = event.pre_vote_credits || 100
@@ -135,7 +126,7 @@ export async function POST(
       .delete()
       .eq('event_id', event.id)
       .eq('session_id', sessionId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
   } else {
     // Insert or update the vote
     const { error: voteError } = await (supabase as any)
@@ -143,7 +134,7 @@ export async function POST(
       .upsert({
         event_id: event.id,
         session_id: sessionId,
-        user_id: user.id,
+        user_id: userId,
         vote_count: voteCount,
         credits_spent: creditsForVote,
         updated_at: new Date().toISOString(),
@@ -164,7 +155,7 @@ export async function POST(
     .from('user_pre_vote_balance')
     .select('credits_spent, credits_remaining')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   return NextResponse.json({

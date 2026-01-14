@@ -171,16 +171,8 @@ export async function PATCH(
 
   const { slug, id } = await params
   const body = await request.json()
+  const userId = payload.sub as string
   const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
 
   // Get the event
   const { data: event, error: eventError } = await supabase
@@ -213,7 +205,7 @@ export async function PATCH(
 
   // Check if user is a host or admin
   const isHost = session.session_hosts?.some(
-    (h: { user_id: string | null }) => h.user_id === user.id
+    (h: { user_id: string | null }) => h.user_id === userId
   )
 
   // Check if user is event admin
@@ -221,7 +213,7 @@ export async function PATCH(
     .from('event_access')
     .select('is_admin')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   const isAdmin = accessRecord?.is_admin === true
@@ -330,16 +322,8 @@ export async function DELETE(
   }
 
   const { slug, id } = await params
+  const userId = payload.sub as string
   const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
 
   // Get the event
   const { data: event, error: eventError } = await supabase
@@ -373,7 +357,7 @@ export async function DELETE(
   // Check if user is the primary host
   const isPrimaryHost = session.session_hosts?.some(
     (h: { user_id: string | null; is_primary: boolean | null }) =>
-      h.user_id === user.id && h.is_primary
+      h.user_id === userId && h.is_primary
   )
 
   // Check if user is event admin
@@ -381,7 +365,7 @@ export async function DELETE(
     .from('event_access')
     .select('is_admin')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   const isAdmin = accessRecord?.is_admin === true
