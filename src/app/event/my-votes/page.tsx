@@ -112,17 +112,23 @@ export default function MyVotesPage() {
   const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null)
   const [dropIndicatorIndex, setDropIndicatorIndex] = React.useState<number | null>(null)
 
+  // Serialize votes for stable comparison to avoid infinite loops
+  const votesKey = React.useMemo(() => JSON.stringify(votes), [votes])
+
   // Load favorites from cached votes when they become available
   React.useEffect(() => {
     if (!isLoggedIn || apiSessions.length === 0 || votesLoading) {
       return
     }
 
+    // Parse votes from serialized key for stable reference
+    const currentVotes: Record<string, number> = JSON.parse(votesKey)
+
     // Filter to favorited sessions (value > 0) using cached votes
     const favorited = apiSessions
       .filter(s => {
         // votes is keyed by session UUID, not topic ID
-        return (votes[s.id] || 0) > 0
+        return (currentVotes[s.id] || 0) > 0
       })
       .map(s => {
         const primaryHost = s.hosts?.find(h => h.isPrimary) || s.hosts?.[0]
@@ -136,7 +142,7 @@ export default function MyVotesPage() {
       })
 
     setRankedSessions(favorited)
-  }, [isLoggedIn, apiSessions, votes, votesLoading])
+  }, [isLoggedIn, apiSessions, votesKey, votesLoading])
 
   // Calculate weights based on current ranking and curve
   const weights = React.useMemo(() => {

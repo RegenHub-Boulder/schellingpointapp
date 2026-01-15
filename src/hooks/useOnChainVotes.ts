@@ -3,6 +3,7 @@
  * Provides caching, automatic refetching, and cache invalidation on vote mutations.
  */
 
+import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ethers } from 'ethers'
 import { SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointVotes'
@@ -139,13 +140,15 @@ export function useOnChainVotes({ sessionIds, enabled = true }: UseOnChainVotesO
   const passkeyInfo = getPasskeyInfo()
   const isLoggedIn = !!passkeyInfo
 
-  // Convert session UUIDs to topic IDs
-  const topicIdMap = sessionIds.reduce((acc, sessionId) => {
-    acc[sessionId] = getTopicId(sessionId)
-    return acc
-  }, {} as Record<string, string>)
+  // Convert session UUIDs to topic IDs (memoized to prevent unnecessary recalculations)
+  const topicIdMap = useMemo(() => {
+    return sessionIds.reduce((acc, sessionId) => {
+      acc[sessionId] = getTopicId(sessionId)
+      return acc
+    }, {} as Record<string, string>)
+  }, [sessionIds])
 
-  const topicIds = Object.values(topicIdMap)
+  const topicIds = useMemo(() => Object.values(topicIdMap), [topicIdMap])
 
   const query = useQuery({
     queryKey: passkeyInfo
@@ -162,13 +165,16 @@ export function useOnChainVotes({ sessionIds, enabled = true }: UseOnChainVotesO
     gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
   })
 
-  // Map topic IDs back to session UUIDs
-  const votes: Record<string, number> = {}
-  if (query.data) {
-    for (const [sessionId, topicId] of Object.entries(topicIdMap)) {
-      votes[sessionId] = query.data[topicId] || 0
+  // Map topic IDs back to session UUIDs (memoized to prevent unnecessary re-renders)
+  const votes = useMemo(() => {
+    const result: Record<string, number> = {}
+    if (query.data) {
+      for (const [sessionId, topicId] of Object.entries(topicIdMap)) {
+        result[sessionId] = query.data[topicId] || 0
+      }
     }
-  }
+    return result
+  }, [query.data, topicIdMap])
 
   return {
     votes,
