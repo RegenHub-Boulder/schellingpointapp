@@ -20,12 +20,20 @@ const formatIcons: Record<string, React.ComponentType<{ className?: string }>> =
   demo: Monitor,
 }
 
-type CurveType = 'even' | 'linear' | 'quadratic'
+type CurveType = 'even' | 'sqrt' | 'linear' | 'exponential'
+
+const curveLabels: Record<CurveType, string> = {
+  even: 'Even',
+  sqrt: 'Square Root',
+  linear: 'Linear',
+  exponential: 'Exponential',
+}
 
 const curveDescriptions: Record<CurveType, string> = {
   even: 'All favorites weighted equally',
+  sqrt: 'Balanced distribution (spreads votes more evenly)',
   linear: 'Higher ranks get more weight (1st > 2nd > 3rd...)',
-  quadratic: 'Top-heavy distribution (1st gets much more than 2nd)',
+  exponential: 'Top-heavy distribution (1st gets much more than 2nd)',
 }
 
 // Calculate weights based on curve type
@@ -39,11 +47,16 @@ function calculateWeights(count: number, curve: CurveType): number[] {
       // All equal
       weights = Array(count).fill(1)
       break
+    case 'sqrt':
+      // sqrt(n), sqrt(n-1), sqrt(n-2), ... sqrt(1)
+      // More balanced than linear - gives more weight to lower-ranked items
+      weights = Array.from({ length: count }, (_, i) => Math.sqrt(count - i))
+      break
     case 'linear':
       // n, n-1, n-2, ... 1
       weights = Array.from({ length: count }, (_, i) => count - i)
       break
-    case 'quadratic':
+    case 'exponential':
       // n^2, (n-1)^2, (n-2)^2, ... 1
       weights = Array.from({ length: count }, (_, i) => Math.pow(count - i, 2))
       break
@@ -87,6 +100,10 @@ export default function MyVotesPage() {
   const [isSaving, setIsSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [initializing, setInitializing] = React.useState(true)
+
+  // Drag and drop state
+  const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null)
+  const [dropIndicatorIndex, setDropIndicatorIndex] = React.useState<number | null>(null)
 
   // Load favorites from chain on mount
   React.useEffect(() => {
@@ -138,22 +155,76 @@ export default function MyVotesPage() {
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData('text/plain', index.toString())
     e.dataTransfer.effectAllowed = 'move'
+    setDraggedIndex(index)
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+
+    // Calculate if we're in the top or bottom half of the element
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    const isAboveMid = e.clientY < midY
+
+    // Determine where the indicator should appear
+    let indicatorPos: number
+    if (isAboveMid) {
+      indicatorPos = index
+    } else {
+      indicatorPos = index + 1
+    }
+
+    // Don't show indicator at the dragged item's current position or adjacent
+    if (draggedIndex !== null) {
+      if (indicatorPos === draggedIndex || indicatorPos === draggedIndex + 1) {
+        setDropIndicatorIndex(null)
+        return
+      }
+    }
+
+    setDropIndicatorIndex(indicatorPos)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the container entirely
+    const relatedTarget = e.relatedTarget as HTMLElement
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      // Check if we're leaving to another card in the list
+      const parent = (e.currentTarget as HTMLElement).parentElement
+      if (parent && !parent.contains(relatedTarget)) {
+        setDropIndicatorIndex(null)
+      }
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null)
+    setDropIndicatorIndex(null)
   }
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault()
     const dragIndex = parseInt(e.dataTransfer.getData('text/plain'))
 
-    if (dragIndex === dropIndex) return
+    // Calculate actual drop position based on indicator
+    let actualDropIndex = dropIndicatorIndex !== null ? dropIndicatorIndex : dropIndex
+
+    // Clear drag state
+    setDraggedIndex(null)
+    setDropIndicatorIndex(null)
+
+    if (dragIndex === actualDropIndex || dragIndex + 1 === actualDropIndex) return
 
     const newSessions = [...rankedSessions]
     const [removed] = newSessions.splice(dragIndex, 1)
-    newSessions.splice(dropIndex, 0, removed)
+
+    // Adjust index if dropping after the dragged item's original position
+    if (actualDropIndex > dragIndex) {
+      actualDropIndex -= 1
+    }
+
+    newSessions.splice(actualDropIndex, 0, removed)
 
     setRankedSessions(newSessions)
     setHasChanges(true)
@@ -270,7 +341,7 @@ export default function MyVotesPage() {
             <div className="text-xs text-muted-foreground">Favorites</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold capitalize">{curve}</div>
+            <div className="text-2xl font-bold">{curveLabels[curve]}</div>
             <div className="text-xs text-muted-foreground">Distribution</div>
           </div>
         </div>
@@ -292,7 +363,7 @@ export default function MyVotesPage() {
                   onClick={() => setShowCurveMenu(!showCurveMenu)}
                   className="min-w-32"
                 >
-                  <span className="capitalize">{curve}</span>
+                  <span>{curveLabels[curve]}</span>
                   <ChevronDown className="h-4 w-4 ml-2" />
                 </Button>
 
@@ -303,7 +374,7 @@ export default function MyVotesPage() {
                       onClick={() => setShowCurveMenu(false)}
                     />
                     <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border bg-background p-1 shadow-lg z-20">
-                      {(['even', 'linear', 'quadratic'] as CurveType[]).map((c) => (
+                      {(['even', 'sqrt', 'linear', 'exponential'] as CurveType[]).map((c) => (
                         <button
                           key={c}
                           onClick={() => handleCurveChange(c)}
@@ -312,7 +383,7 @@ export default function MyVotesPage() {
                             curve === c && 'bg-accent'
                           )}
                         >
-                          <span className="capitalize font-medium">{c}</span>
+                          <span className="font-medium">{curveLabels[c]}</span>
                         </button>
                       ))}
                     </div>
@@ -330,54 +401,77 @@ export default function MyVotesPage() {
               {rankedSessions.map((session, index) => {
                 const FormatIcon = formatIcons[session.format] || Mic
                 const percentage = weights[index]
+                const isDragging = draggedIndex === index
 
                 return (
-                  <Card
-                    key={session.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, index)}
-                    className="p-4 cursor-move hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      {/* Rank number */}
-                      <div className="flex items-center gap-2">
-                        <GripVertical className="h-4 w-4 text-muted-foreground" />
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-sm">
-                          {index + 1}
+                  <React.Fragment key={session.id}>
+                    {/* Drop indicator before this item */}
+                    {dropIndicatorIndex === index && (
+                      <div className="relative h-1 my-1">
+                        <div className="absolute inset-x-0 h-0.5 bg-primary rounded-full" />
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+                      </div>
+                    )}
+                    <Card
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e) => handleDrop(e, index)}
+                      className={cn(
+                        "p-4 cursor-move hover:bg-accent/50 transition-all",
+                        isDragging && "opacity-50 scale-[0.98]"
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        {/* Rank number */}
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="h-4 w-4 text-muted-foreground" />
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-sm">
+                            {index + 1}
+                          </div>
+                        </div>
+
+                        {/* Session info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                            <FormatIcon className="h-4 w-4" />
+                            <span className="capitalize">{session.format}</span>
+                            <span>•</span>
+                            <span>{session.duration} min</span>
+                          </div>
+                          <Link
+                            href={`/event/sessions/${session.id}`}
+                            className="font-medium truncate hover:underline block"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {session.title}
+                          </Link>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {session.hostName}
+                          </p>
+                        </div>
+
+                        {/* Percentage */}
+                        <div className="text-right">
+                          <div className="text-2xl font-bold">{percentage}%</div>
+                          <div className="text-xs text-muted-foreground">of your vote</div>
                         </div>
                       </div>
-
-                      {/* Session info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                          <FormatIcon className="h-4 w-4" />
-                          <span className="capitalize">{session.format}</span>
-                          <span>•</span>
-                          <span>{session.duration} min</span>
-                        </div>
-                        <Link
-                          href={`/event/sessions/${session.id}`}
-                          className="font-medium truncate hover:underline block"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {session.title}
-                        </Link>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {session.hostName}
-                        </p>
-                      </div>
-
-                      {/* Percentage */}
-                      <div className="text-right">
-                        <div className="text-2xl font-bold">{percentage}%</div>
-                        <div className="text-xs text-muted-foreground">of your vote</div>
-                      </div>
-                    </div>
-                  </Card>
+                    </Card>
+                  </React.Fragment>
                 )
               })}
+              {/* Drop indicator after the last item */}
+              {dropIndicatorIndex === rankedSessions.length && (
+                <div className="relative h-1 my-1">
+                  <div className="absolute inset-x-0 h-0.5 bg-primary rounded-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+                </div>
+              )}
             </div>
           </div>
 
