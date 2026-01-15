@@ -13,7 +13,7 @@ import { useSessions, Session } from '@/hooks/use-sessions'
 import { useVotes } from '@/hooks/use-votes'
 import { useFavorites } from '@/hooks/use-favorites'
 import { useAuth } from '@/hooks'
-import { useVoting, getTopicId } from '@/hooks/useVoting'
+import { useOnChainVotes, useVoteMutation } from '@/hooks/useOnChainVotes'
 
 // Transform API session to UI format
 function transformSession(session: Session) {
@@ -69,40 +69,27 @@ export default function SessionsPage() {
   // Favorites persisted to localStorage (fallback)
   const { favorites, isFavorited, toggleFavorite } = useFavorites()
 
-  // On-chain voting
-  const { castVote: castOnChainVote, getVotes, isVoting } = useVoting()
+  // On-chain voting - fetch votes with React Query caching
+  const sessionIds = React.useMemo(() => apiSessions.map(s => s.id), [apiSessions])
+  const {
+    votes: onChainVotes,
+    isLoading: loadingOnChainVotes,
+  } = useOnChainVotes({
+    sessionIds,
+    enabled: isLoggedIn && apiSessions.length > 0
+  })
 
-  // On-chain favorites state (value=1 means favorited)
-  const [onChainFavorites, setOnChainFavorites] = React.useState<Record<string, number>>({})
-  const [loadingOnChainVotes, setLoadingOnChainVotes] = React.useState(false)
-
-  // Load on-chain votes when sessions load
-  React.useEffect(() => {
-    async function loadOnChainVotes() {
-      if (!isLoggedIn || apiSessions.length === 0) return
-
-      setLoadingOnChainVotes(true)
-      try {
-        const topicIds = apiSessions.map(s => getTopicId(s.id))
-        const votes = await getVotes(topicIds)
-        setOnChainFavorites(votes)
-      } catch (err) {
-        console.error('Failed to load on-chain votes:', err)
-      } finally {
-        setLoadingOnChainVotes(false)
-      }
-    }
-    loadOnChainVotes()
-  }, [apiSessions, isLoggedIn, getVotes])
+  // Mutation hook for casting votes
+  const { castVote: castOnChainVote, isPending: isVoting } = useVoteMutation()
 
   // Check if session is favorited (on-chain or localStorage fallback)
   const isSessionFavorited = React.useCallback((sessionId: string): boolean => {
     if (isLoggedIn) {
-      const topicId = getTopicId(sessionId)
-      return onChainFavorites[topicId] === 1
+      // onChainVotes is keyed by session UUID directly
+      return onChainVotes[sessionId] === 1
     }
     return isFavorited(sessionId)
-  }, [isLoggedIn, onChainFavorites, isFavorited])
+  }, [isLoggedIn, onChainVotes, isFavorited])
 
   // Transform API sessions and add user votes
   const sessions = React.useMemo(() => {
@@ -150,25 +137,14 @@ export default function SessionsPage() {
       return
     }
 
-    const topicId = getTopicId(sessionId)
-    const currentValue = onChainFavorites[topicId] || 0
+    const currentValue = onChainVotes[sessionId] || 0
     const newValue = currentValue === 1 ? 0 : 1
 
-    // Optimistically update UI
-    setOnChainFavorites(prev => ({
-      ...prev,
-      [topicId]: newValue
-    }))
-
     try {
-      await castOnChainVote(topicId, newValue)
+      // useVoteMutation automatically invalidates cache on success
+      await castOnChainVote({ sessionId, value: newValue })
     } catch (err) {
       console.error('Failed to toggle favorite on-chain:', err)
-      // Revert on error
-      setOnChainFavorites(prev => ({
-        ...prev,
-        [topicId]: currentValue
-      }))
     }
   }
 

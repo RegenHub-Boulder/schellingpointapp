@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { useVotes } from '@/hooks/use-votes'
 import { useAuth } from '@/hooks'
 import { useSessions } from '@/hooks/use-sessions'
-import { useVoting, getTopicId } from '@/hooks/useVoting'
+import { useOnChainVotes, useVoteMutation } from '@/hooks/useOnChainVotes'
 
 const formatIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   talk: Mic,
@@ -90,61 +90,53 @@ export default function MyVotesPage() {
   const { user, isLoggedIn } = useAuth()
   const { balance } = useVotes()
   const { sessions: apiSessions, loading: sessionsLoading } = useSessions({ status: 'approved' })
-  const { getVotes, batchVote, isVoting, isLoading: votesLoading } = useVoting()
+
+  // Get session IDs for the on-chain votes query
+  const sessionIds = React.useMemo(() => apiSessions.map(s => s.id), [apiSessions])
+
+  // Use the new React Query-based hooks
+  const { votes, isLoading: votesLoading, isLoggedIn: hasPasskey } = useOnChainVotes({
+    sessionIds,
+    enabled: isLoggedIn && sessionIds.length > 0
+  })
+  const { castBatchVotes, isPending: isSaving, error: mutationError, reset: resetMutation } = useVoteMutation()
 
   // State
   const [rankedSessions, setRankedSessions] = React.useState<RankedSession[]>([])
   const [curve, setCurve] = React.useState<CurveType>('even')
   const [showCurveMenu, setShowCurveMenu] = React.useState(false)
   const [hasChanges, setHasChanges] = React.useState(false)
-  const [isSaving, setIsSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string | null>(null)
-  const [initializing, setInitializing] = React.useState(true)
 
   // Drag and drop state
   const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null)
   const [dropIndicatorIndex, setDropIndicatorIndex] = React.useState<number | null>(null)
 
-  // Load favorites from chain on mount
+  // Load favorites from cached votes when they become available
   React.useEffect(() => {
-    async function loadFavorites() {
-      if (!isLoggedIn || apiSessions.length === 0) {
-        setInitializing(false)
-        return
-      }
-
-      try {
-        // Get topic IDs for all sessions
-        const topicIds = apiSessions.map(s => getTopicId(s.id))
-        const votes = await getVotes(topicIds)
-
-        // Filter to favorited sessions (value > 0)
-        const favorited = apiSessions
-          .filter(s => {
-            const topicId = getTopicId(s.id)
-            return votes[topicId] > 0
-          })
-          .map(s => {
-            const primaryHost = s.hosts?.find(h => h.isPrimary) || s.hosts?.[0]
-            return {
-              id: s.id,
-              title: s.title,
-              format: s.format || 'talk',
-              duration: s.duration || 60,
-              hostName: primaryHost?.name || 'Unknown Host',
-            }
-          })
-
-        setRankedSessions(favorited)
-      } catch (err) {
-        console.error('Failed to load favorites:', err)
-      } finally {
-        setInitializing(false)
-      }
+    if (!isLoggedIn || apiSessions.length === 0 || votesLoading) {
+      return
     }
 
-    loadFavorites()
-  }, [isLoggedIn, apiSessions, getVotes])
+    // Filter to favorited sessions (value > 0) using cached votes
+    const favorited = apiSessions
+      .filter(s => {
+        // votes is keyed by session UUID, not topic ID
+        return (votes[s.id] || 0) > 0
+      })
+      .map(s => {
+        const primaryHost = s.hosts?.find(h => h.isPrimary) || s.hosts?.[0]
+        return {
+          id: s.id,
+          title: s.title,
+          format: s.format || 'talk',
+          duration: s.duration || 60,
+          hostName: primaryHost?.name || 'Unknown Host',
+        }
+      })
+
+    setRankedSessions(favorited)
+  }, [isLoggedIn, apiSessions, votes, votesLoading])
 
   // Calculate weights based on current ranking and curve
   const weights = React.useMemo(() => {
@@ -234,23 +226,21 @@ export default function MyVotesPage() {
   const handleSave = async () => {
     if (rankedSessions.length === 0) return
 
-    setIsSaving(true)
     setSaveError(null)
+    resetMutation()
 
     try {
-      // Build vote array with percentages
-      const votes = rankedSessions.map((session, index) => ({
-        topicId: getTopicId(session.id),
+      // Build vote array with session UUIDs and percentages
+      const voteParams = rankedSessions.map((session, index) => ({
+        sessionId: session.id,
         value: weights[index]
       }))
 
-      await batchVote(votes)
+      await castBatchVotes(voteParams)
       setHasChanges(false)
     } catch (err) {
       console.error('Failed to save votes:', err)
       setSaveError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setIsSaving(false)
     }
   }
 
@@ -261,7 +251,7 @@ export default function MyVotesPage() {
     setHasChanges(true)
   }
 
-  const loading = sessionsLoading || initializing
+  const loading = sessionsLoading || votesLoading
 
   // Loading state
   if (loading) {
