@@ -158,7 +158,7 @@ export function useOnChainVotes({ sessionIds, enabled = true }: UseOnChainVotesO
       return fetchVotesFromChain(topicIds, passkeyInfo.pubKeyX, passkeyInfo.pubKeyY)
     },
     enabled: enabled && sessionIds.length > 0,
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 60 * 1000, // 1 minute
     gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
   })
 
@@ -290,14 +290,54 @@ export function useVoteMutation(): UseVoteMutationResult {
 
       return voteData.txHash
     },
-    onSuccess: () => {
-      // Invalidate all vote queries for this user
+    onMutate: async ({ sessionId, value }: CastVoteParams) => {
       const passkeyInfo = getPasskeyInfo()
-      if (passkeyInfo) {
-        queryClient.invalidateQueries({
-          queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY)
-        })
+      if (!passkeyInfo) return {}
+
+      const topicId = getTopicId(sessionId)
+
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY) })
+
+      // Snapshot previous value - get all cached queries for this user
+      const previousVotes: Record<string, Record<string, number>> = {}
+      const queries = queryClient.getQueriesData<Record<string, number>>({
+        queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY)
+      })
+
+      for (const [key, data] of queries) {
+        if (data) {
+          previousVotes[JSON.stringify(key)] = data
+        }
       }
+
+      // Optimistically update all matching caches
+      queryClient.setQueriesData<Record<string, number>>(
+        { queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY) },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            [topicId]: value
+          }
+        }
+      )
+
+      // Return context with previous value for rollback
+      return { previousVotes, passkeyInfo }
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback on error
+      if (context?.previousVotes && context?.passkeyInfo) {
+        for (const [keyStr, data] of Object.entries(context.previousVotes)) {
+          const key = JSON.parse(keyStr)
+          queryClient.setQueryData(key, data)
+        }
+      }
+    },
+    onSuccess: () => {
+      // Don't invalidate - trust optimistic update
+      // Data will refresh after stale time (1 minute) or on page reload
     },
   })
 
@@ -384,14 +424,59 @@ export function useVoteMutation(): UseVoteMutationResult {
 
       return voteData.txHash
     },
-    onSuccess: () => {
-      // Invalidate all vote queries for this user
+    onMutate: async (votes: CastVoteParams[]) => {
       const passkeyInfo = getPasskeyInfo()
-      if (passkeyInfo) {
-        queryClient.invalidateQueries({
-          queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY)
-        })
+      if (!passkeyInfo || votes.length === 0) return {}
+
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY) })
+
+      // Snapshot previous value - get all cached queries for this user
+      const previousVotes: Record<string, Record<string, number>> = {}
+      const queries = queryClient.getQueriesData<Record<string, number>>({
+        queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY)
+      })
+
+      for (const [key, data] of queries) {
+        if (data) {
+          previousVotes[JSON.stringify(key)] = data
+        }
       }
+
+      // Build updates map from votes
+      const updates: Record<string, number> = {}
+      for (const vote of votes) {
+        const topicId = getTopicId(vote.sessionId)
+        updates[topicId] = vote.value
+      }
+
+      // Optimistically update all matching caches
+      queryClient.setQueriesData<Record<string, number>>(
+        { queryKey: voteKeys.user(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY) },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            ...updates
+          }
+        }
+      )
+
+      // Return context with previous value for rollback
+      return { previousVotes, passkeyInfo }
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback on error
+      if (context?.previousVotes && context?.passkeyInfo) {
+        for (const [keyStr, data] of Object.entries(context.previousVotes)) {
+          const key = JSON.parse(keyStr)
+          queryClient.setQueryData(key, data)
+        }
+      }
+    },
+    onSuccess: () => {
+      // Don't invalidate - trust optimistic update
+      // Data will refresh after stale time (1 minute) or on page reload
     },
   })
 
@@ -430,7 +515,7 @@ export function usePrefetchVotes() {
     await queryClient.prefetchQuery({
       queryKey: voteKeys.sessions(passkeyInfo.pubKeyX, passkeyInfo.pubKeyY, sessionIds),
       queryFn: () => fetchVotesFromChain(topicIds, passkeyInfo.pubKeyX, passkeyInfo.pubKeyY),
-      staleTime: 30 * 1000,
+      staleTime: 60 * 1000, // 1 minute
     })
   }
 }
