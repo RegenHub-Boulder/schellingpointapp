@@ -1,4 +1,4 @@
-export { useAuth } from '@/context/auth-context'
+export { useAuth } from './useAuth'
 export { useEvent } from './use-event'
 export { useSessions } from './use-sessions'
 export { useSession } from './use-session'

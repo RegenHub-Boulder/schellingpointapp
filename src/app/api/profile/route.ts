@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyJWT } from '@/lib/jwt'
 import { createClient } from '@/lib/supabase/server'
 
 export interface ProfileData {
@@ -16,43 +17,43 @@ export interface ProfileData {
 }
 
 // GET /api/profile - Get current user's profile
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const token = authHeader.slice(7)
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const userId = payload.sub as string
+
   const supabase = await createClient()
 
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user || !user.email) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
-
-  const userEmail = user.email
-
-  // Get user profile
+  // Get user profile by ID
   const { data: profile, error } = await supabase
     .from('users')
     .select('*')
-    .eq('email', userEmail)
+    .eq('id', userId)
     .single()
 
   if (error) {
-    // User might not have a profile yet - return basic info from auth
+    // User might not have a profile yet - return basic info from JWT
     if (error.code === 'PGRST116') {
       return NextResponse.json({
         profile: {
-          id: user.id,
-          email: user.email,
-          displayName: user.user_metadata?.display_name || null,
+          id: userId,
+          email: payload.email || null,
+          displayName: payload.displayName || null,
           bio: null,
-          avatarUrl: user.user_metadata?.avatar_url || null,
+          avatarUrl: null,
           topics: null,
           smartWalletAddress: null,
           ensAddress: null,
           payoutAddress: null,
-          createdAt: user.created_at,
-          updatedAt: user.updated_at || user.created_at,
+          createdAt: null,
+          updatedAt: null,
         }
       })
     }
@@ -81,18 +82,18 @@ export async function GET() {
 
 // PATCH /api/profile - Update current user's profile
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user || !user.email) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const token = authHeader.slice(7)
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const userId = payload.sub as string
 
-  const userEmail = user.email
+  const supabase = await createClient()
 
   const body = await request.json()
   const { displayName, bio, avatarUrl, topics, payoutAddress, ensAddress } = body
@@ -117,7 +118,7 @@ export async function PATCH(request: NextRequest) {
   const { data: existingProfile } = await supabase
     .from('users')
     .select('id')
-    .eq('email', userEmail)
+    .eq('id', userId)
     .single()
 
   let profile
@@ -128,7 +129,7 @@ export async function PATCH(request: NextRequest) {
     const result = await supabase
       .from('users')
       .update(updateData)
-      .eq('email', userEmail)
+      .eq('id', userId)
       .select()
       .single()
     profile = result.data
@@ -136,11 +137,19 @@ export async function PATCH(request: NextRequest) {
   } else {
     // Create new profile - need to generate a smart wallet address placeholder
     // In production, this would be a real smart wallet creation
+    // Note: email is required in the database schema
+    if (!payload.email) {
+      return NextResponse.json(
+        { error: 'Email is required to create a profile' },
+        { status: 400 }
+      )
+    }
     const result = await supabase
       .from('users')
       .insert({
-        email: userEmail,
-        smart_wallet_address: `0x${user.id.replace(/-/g, '')}`, // Placeholder
+        id: userId,
+        email: payload.email,
+        smart_wallet_address: `0x${userId.replace(/-/g, '')}`, // Placeholder
         ...updateData,
       })
       .select()

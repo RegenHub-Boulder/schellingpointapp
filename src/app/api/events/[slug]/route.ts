@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { verifyJWT } from '@/lib/jwt'
 
 // GET /api/events/:slug - Get event details
 export async function GET(
@@ -68,18 +69,21 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // JWT validation
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const token = authHeader.slice(7)
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const userId = payload.sub as string
+
   const { slug } = await params
   const body = await request.json()
   const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
 
   // Get the event
   const { data: event, error: eventError } = await supabase
@@ -100,7 +104,7 @@ export async function PATCH(
     .from('event_access')
     .select('is_admin')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   if (!accessRecord?.is_admin) {

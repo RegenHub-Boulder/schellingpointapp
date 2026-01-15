@@ -2,10 +2,10 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Clock, MapPin, ChevronRight, Loader2, Radio, Calendar } from 'lucide-react'
+import { Clock, MapPin, ChevronRight, Loader2, Radio, Calendar, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { TapToVote } from '@/components/voting/tap-to-vote'
 import { VoteDots } from '@/components/voting/vote-dots'
@@ -14,6 +14,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { useTimeSlots, TimeSlot } from '@/hooks/use-time-slots'
 import { useVotes } from '@/hooks/use-votes'
 import { useEvent } from '@/hooks/use-event'
+import { useVoting, getTopicId } from '@/hooks/useVoting'
 
 // Helper to check if a time slot is currently live
 function isLiveNow(timeSlot: TimeSlot): boolean {
@@ -34,7 +35,14 @@ export default function LiveVotingPage() {
   const { event, loading: eventLoading } = useEvent()
   const { sessions, loading: sessionsLoading } = useSessions({ status: 'scheduled' })
   const { timeSlots, loading: timeSlotsLoading } = useTimeSlots()
-  const { balance, votes: userVotes, castVote, getVoteForSession } = useVotes()
+  const { balance, votes: userVotes, castVote: castOffChainVote, getVoteForSession } = useVotes()
+
+  // On-chain voting hook
+  const { castVote: castOnChainVote, isVoting } = useVoting()
+
+  // On-chain transaction tracking
+  const [lastTxHash, setLastTxHash] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
 
   const loading = eventLoading || sessionsLoading || timeSlotsLoading
 
@@ -94,6 +102,7 @@ export default function LiveVotingPage() {
 
   const handleVote = async () => {
     if (!liveSession) return
+    setError(null)
 
     const newVotes = localVotes + 1
     const cost = calculateQuadraticCost(newVotes)
@@ -104,15 +113,28 @@ export default function LiveVotingPage() {
     }
 
     setLocalVotes(newVotes)
-
-    // Debounce save to server
     setIsSaving(true)
-    const result = await castVote(liveSession.session.id, newVotes)
-    setIsSaving(false)
 
-    if (!result.success) {
-      // Revert on error
+    try {
+      // Cast vote on-chain first
+      const topicId = getTopicId(liveSession.session.id)
+      const txHash = await castOnChainVote(topicId, 1)
+      setLastTxHash(txHash)
+
+      // Then update off-chain stats
+      const result = await castOffChainVote(liveSession.session.id, newVotes)
+
+      if (!result.success) {
+        // Revert on error
+        setLocalVotes(localVotes)
+        setError('Failed to save vote')
+      }
+    } catch (err) {
+      console.error('Vote error:', err)
+      setError(err instanceof Error ? err.message : 'Vote failed')
       setLocalVotes(localVotes)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -234,12 +256,44 @@ export default function LiveVotingPage() {
         <CreditBar total={totalCredits} spent={spentCredits} />
       </div>
 
+      {/* Error display */}
+      {error && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <span className="text-sm text-destructive">{error}</span>
+        </div>
+      )}
+
+      {/* Voting status */}
+      {isVoting && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
+          <span className="text-sm text-primary">
+            Submitting vote on-chain...
+          </span>
+        </div>
+      )}
+
+      {/* Last tx hash */}
+      {lastTxHash && (
+        <div className="mx-4 mt-2 text-center">
+          <a
+            href={`https://sepolia.basescan.org/tx/${lastTxHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-primary underline"
+          >
+            View last vote on Basescan
+          </a>
+        </div>
+      )}
+
       {/* Tap to Vote */}
       <div className="flex-1 flex items-center justify-center p-8">
         <TapToVote
           votes={localVotes}
           onVote={handleVote}
           remainingCredits={balance.creditsRemaining}
+          disabled={isVoting || isSaving}
         />
       </div>
 

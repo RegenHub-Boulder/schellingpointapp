@@ -11,5 +11,8 @@ export * from './api-helpers'
 // Auth helpers
 export * from './auth-helpers'
 
+// WebAuthn helpers for passkey testing
+export * from './webauthn-helpers'
+
 // Re-export test data
 export * from '../fixtures/test-data'

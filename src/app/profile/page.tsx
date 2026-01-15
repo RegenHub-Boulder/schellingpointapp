@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks'
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, signOut, loading: authLoading } = useAuth()
+  const { user, logout, isLoading: authLoading } = useAuth()
   const { profile, loading: profileLoading, error, updateProfile } = useProfile()
 
   const [isEditing, setIsEditing] = React.useState(false)
@@ -21,6 +21,14 @@ export default function ProfilePage() {
   const [newInterest, setNewInterest] = React.useState('')
 
   const loading = authLoading || profileLoading
+
+  // Route protection: redirect to login if not authenticated
+  // This MUST be before any conditional returns to satisfy React hooks rules
+  React.useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/login')
+    }
+  }, [authLoading, user, router])
 
   // Initialize editedProfile when profile loads
   React.useEffect(() => {
@@ -78,49 +86,24 @@ export default function ProfilePage() {
   }
 
   const handleSignOut = async () => {
-    await signOut()
+    logout()
     router.push('/')
   }
 
-  // Loading state
-  if (loading) {
+  // Loading state or not authenticated - show loading while redirecting
+  if (loading || !user) {
     return (
-      <div className="min-h-screen flex flex-col bg-muted/30">
-        <Navbar user={undefined} onSignOut={handleSignOut} />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </main>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
-  // Not signed in
-  if (!user || error?.includes('sign in')) {
+  // Error state where user needs to sign in
+  if (error?.includes('sign in')) {
     return (
-      <div className="min-h-screen flex flex-col bg-muted/30">
-        <Navbar user={undefined} onSignOut={handleSignOut} />
-        <main className="flex-1 py-8">
-          <Container>
-            <div className="max-w-4xl mx-auto">
-              <Card className="p-12">
-                <div className="text-center">
-                  <div className="flex justify-center mb-4">
-                    <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-                      <Lock className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">Sign In Required</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Please sign in to view and manage your profile
-                  </p>
-                  <Button asChild>
-                    <a href="/auth">Sign In</a>
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          </Container>
-        </main>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }

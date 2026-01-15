@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { verifyJWT } from '@/lib/jwt'
 
 // GET /api/events/:slug/sessions - List sessions for an event
 export async function GET(
@@ -19,14 +20,24 @@ export async function GET(
   // If filtering by user's sessions, get current user
   let currentUserId: string | null = null
   if (mine) {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
         { error: 'Unauthorized - login required to view your sessions' },
         { status: 401 }
       )
     }
-    currentUserId = user.id
+
+    const token = authHeader.slice(7)
+    const payload = await verifyJWT(token)
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'Unauthorized - invalid token' },
+        { status: 401 }
+      )
+    }
+
+    currentUserId = payload.sub as string
   }
 
   // First get the event by slug
@@ -164,19 +175,22 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // JWT validation
+  const authHeader = request.headers.get('Authorization')
+  const token = authHeader?.replace('Bearer ', '')
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+
   const { slug } = await params
   const body = await request.json()
+  const userId = payload.sub as string
 
   const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
 
   // Get the event
   const { data: event, error: eventError } = await supabase
@@ -252,28 +266,12 @@ export async function POST(
     )
   }
 
-  // Get user record from users table
-  const { data: userRecord } = await supabase
-    .from('users')
-    .select('id')
-    .eq('id', user.id)
-    .single()
-
-  if (!userRecord) {
-    // Clean up the session if we can't add the host
-    await supabase.from('sessions').delete().eq('id', session.id)
-    return NextResponse.json(
-      { error: 'User profile not found' },
-      { status: 400 }
-    )
-  }
-
   // Add the primary host
   const { error: hostError } = await supabase
     .from('session_hosts')
     .insert({
       session_id: session.id,
-      user_id: userRecord.id,
+      user_id: userId,
       is_primary: true,
       status: 'accepted'
     })

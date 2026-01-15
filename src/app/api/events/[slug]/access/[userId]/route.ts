@@ -1,22 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { verifyJWT } from '@/lib/jwt'
 
 // DELETE /api/events/:slug/access/:userId - Remove access for a user (admin only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; userId: string }> }
 ) {
-  const { slug, userId } = await params
-  const supabase = await createClient()
-
-  // Get current user
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const token = authHeader.slice(7)
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const currentUserId = payload.sub as string
+
+  const { slug, userId: targetUserId } = await params
+  const supabase = await createClient()
 
   // Get the event
   const { data: event, error: eventError } = await supabase
@@ -37,7 +40,7 @@ export async function DELETE(
     .from('event_access')
     .select('is_admin')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', currentUserId)
     .single()
 
   if (!accessRecord?.is_admin) {
@@ -48,7 +51,7 @@ export async function DELETE(
   }
 
   // Cannot remove own access
-  if (userId === user.id) {
+  if (targetUserId === currentUserId) {
     return NextResponse.json(
       { error: 'Cannot remove your own access' },
       { status: 400 }
@@ -60,7 +63,7 @@ export async function DELETE(
     .from('event_access')
     .delete()
     .eq('event_id', event.id)
-    .eq('user_id', userId)
+    .eq('user_id', targetUserId)
 
   if (deleteError) {
     return NextResponse.json(

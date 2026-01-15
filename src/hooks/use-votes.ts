@@ -47,7 +47,10 @@ export function useVotes(slug: string = EVENT_SLUG): UseVotesReturn {
     setError(null)
 
     try {
-      const response = await fetch(`/api/events/${slug}/votes/me`)
+      const token = localStorage.getItem('authToken')
+      const response = await fetch(`/api/events/${slug}/votes/me`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
 
       if (response.status === 401) {
         // User not authenticated - that's okay, just return empty

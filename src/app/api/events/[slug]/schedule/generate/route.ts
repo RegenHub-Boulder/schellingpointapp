@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { verifyJWT } from '@/lib/jwt'
 import {
   ScheduleGenerator,
   ScheduleInput,
@@ -14,6 +15,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // JWT validation
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const token = authHeader.slice(7)
+  const payload = await verifyJWT(token)
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const userId = payload.sub as string
+
   const { slug } = await params
   const supabase = await createClient()
 
@@ -31,15 +44,6 @@ export async function POST(
     // Empty body is fine, use defaults
   }
 
-  // 1. Auth check
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   // 2. Get event and verify it exists
   const { data: event, error: eventError } = await supabase
     .from('events')
@@ -51,12 +55,12 @@ export async function POST(
     return NextResponse.json({ error: 'Event not found' }, { status: 404 })
   }
 
-  // 3. Check admin permission
+  // 2. Check admin permission
   const { data: accessRecord } = await supabase
     .from('event_access')
     .select('is_admin')
     .eq('event_id', event.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single()
 
   if (!accessRecord?.is_admin) {
