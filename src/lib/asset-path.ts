@@ -1,10 +1,8 @@
 /**
  * Get the correct asset path for static files
- * Handles basePath in production builds (GitHub Pages)
+ * Returns the path as-is since the app is deployed to Vercel without a basePath
  */
 export function getAssetPath(path: string): string {
-  const basePath = process.env.NODE_ENV === 'production' ? '/schellingpointdemo' : ''
-  // Remove leading slash if present to avoid double slashes
-  const cleanPath = path.startsWith('/') ? path.slice(1) : path
-  return `${basePath}/${cleanPath}`
+  // Ensure path starts with /
+  return path.startsWith('/') ? path : `/${path}`
 }

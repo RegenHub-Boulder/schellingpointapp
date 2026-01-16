@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { verifyJWT } from '@/lib/jwt'
 
 // GET /api/events/:slug/participants - List participants (admin only)
@@ -56,8 +56,11 @@ export async function GET(
     )
   }
 
+  // Use admin client to bypass RLS for fetching all participants
+  const adminClient = await createAdminClient()
+
   // Build query
-  let query = supabase
+  let query = adminClient
     .from('event_access')
     .select(`
       id,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { verifyJWT } from '@/lib/jwt'
 import {
   ScheduleGenerator,
@@ -204,12 +204,16 @@ export async function POST(
   const result = generator.generate()
 
   // 9. Apply the schedule if not a dry run
-  const dryRun = body.dryRun !== false // Default to true (dry run)
+  // Default to NOT dry run (actually apply the schedule) since that's what users expect
+  const dryRun = body.dryRun === true
 
   if (!dryRun && result.success) {
+    // Use admin client to bypass RLS for session updates
+    const adminClient = await createAdminClient()
+
     // Update sessions with assignments
     for (const assignment of result.assignments) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminClient
         .from('sessions')
         .update({
           venue_id: assignment.venueId,

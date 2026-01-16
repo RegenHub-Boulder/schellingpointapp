@@ -242,8 +242,12 @@ export async function POST(
     )
   }
 
+  // Use admin client to bypass RLS for session creation
+  // (RLS requires event_access record which user may not have yet)
+  const adminClient = await createAdminClient()
+
   // Create the session
-  const { data: session, error: sessionError } = await supabase
+  const { data: session, error: sessionError } = await adminClient
     .from('sessions')
     .insert({
       event_id: event.id,
@@ -267,7 +271,7 @@ export async function POST(
   }
 
   // Add the primary host
-  const { error: hostError } = await supabase
+  const { error: hostError } = await adminClient
     .from('session_hosts')
     .insert({
       session_id: session.id,
@@ -278,7 +282,7 @@ export async function POST(
 
   if (hostError) {
     // Clean up on error
-    await supabase.from('sessions').delete().eq('id', session.id)
+    await adminClient.from('sessions').delete().eq('id', session.id)
     return NextResponse.json(
       { error: hostError.message },
       { status: 500 }
@@ -287,14 +291,14 @@ export async function POST(
 
   // Add co-hosts if specified (with pending status)
   if (coHosts && coHosts.length > 0) {
-    const coHostInserts = coHosts.map((userId: string) => ({
+    const coHostInserts = coHosts.map((coHostUserId: string) => ({
       session_id: session.id,
-      user_id: userId,
+      user_id: coHostUserId,
       is_primary: false,
       status: 'pending'
     }))
 
-    await supabase.from('session_hosts').insert(coHostInserts)
+    await adminClient.from('session_hosts').insert(coHostInserts)
     // Note: In production, send notifications to co-hosts here
   }
 

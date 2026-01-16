@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { verifyJWT } from '@/lib/jwt'
 
 // POST /api/events/:slug/votes - Cast or update a vote
@@ -118,10 +118,14 @@ export async function POST(
     )
   }
 
+  // Use admin client to bypass RLS for vote operations
+  // (RLS requires event_access record which user may not have)
+  const adminClient = await createAdminClient()
+
   // Upsert the vote
   if (voteCount === 0) {
     // Delete the vote if voteCount is 0
-    await (supabase as any)
+    await (adminClient as any)
       .from('pre_votes')
       .delete()
       .eq('event_id', event.id)
@@ -129,7 +133,7 @@ export async function POST(
       .eq('user_id', userId)
   } else {
     // Insert or update the vote
-    const { error: voteError } = await (supabase as any)
+    const { error: voteError } = await (adminClient as any)
       .from('pre_votes')
       .upsert({
         event_id: event.id,
@@ -151,7 +155,7 @@ export async function POST(
   }
 
   // Get updated balance
-  const { data: updatedBalance } = await (supabase as any)
+  const { data: updatedBalance } = await (adminClient as any)
     .from('user_pre_vote_balance')
     .select('credits_spent, credits_remaining')
     .eq('event_id', event.id)
