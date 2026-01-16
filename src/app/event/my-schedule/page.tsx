@@ -28,9 +28,23 @@ const formatLabels: Record<string, string> = {
 
 export default function MySchedulePage() {
   const { event, loading: eventLoading } = useEvent()
-  // Fetch scheduled sessions (those that have been assigned to the schedule)
-  const { sessions: allSessions, loading: sessionsLoading } = useSessions({ status: 'scheduled' })
+  // Fetch all approved/scheduled sessions - users can favorite either
+  // We filter to favorited sessions below, so no status filter needed
+  const { sessions: approvedSessions, loading: approvedLoading } = useSessions({ status: 'approved' })
+  const { sessions: scheduledSessions, loading: scheduledLoading } = useSessions({ status: 'scheduled' })
   const { favorites, removeFavorite } = useFavorites()
+
+  // Combine both sets of sessions, deduplicating by ID (scheduled sessions may have been approved first)
+  const allSessions = React.useMemo(() => {
+    const sessionMap = new Map<string, typeof approvedSessions[0]>()
+    // Add approved sessions first
+    approvedSessions.forEach(s => sessionMap.set(s.id, s))
+    // Scheduled sessions override approved (they have time slot info)
+    scheduledSessions.forEach(s => sessionMap.set(s.id, s))
+    return Array.from(sessionMap.values())
+  }, [approvedSessions, scheduledSessions])
+
+  const sessionsLoading = approvedLoading || scheduledLoading
 
   const loading = eventLoading || sessionsLoading
 
