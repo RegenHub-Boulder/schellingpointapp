@@ -47,6 +47,7 @@ import {
 import { cn } from '@/lib/utils'
 import { SessionTrack, trackConfig } from '@/types'
 import { useSessions, Session as ApiSession } from '@/hooks/use-sessions'
+import { useEvent, useRealtimeSessions } from '@/hooks'
 import { EVENT_SLUG } from '@/lib/config'
 
 interface Session {
@@ -124,8 +125,20 @@ const statusLabels: Record<string, string> = {
 }
 
 export default function AdminSessionsPage() {
+  // Fetch event for real-time subscription
+  const { event } = useEvent()
+
   // Fetch all sessions (no status filter for admin view)
   const { sessions: apiSessions, loading, error, refetch } = useSessions({})
+
+  // Real-time session updates - refetch when sessions change
+  useRealtimeSessions({
+    eventId: event?.id || '',
+    enabled: !!event?.id,
+    onSessionUpdate: () => refetch(),
+    onSessionInsert: () => refetch(),
+    onSessionDelete: () => refetch(),
+  })
 
   // Transform API sessions to UI format
   const sessions = React.useMemo(() => {

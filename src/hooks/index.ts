@@ -6,6 +6,8 @@ export { useVotes } from './use-votes'
 export { useVenues } from './use-venues'
 export { useTimeSlots } from './use-time-slots'
 export { useSchedule } from './use-schedule'
+export { useRealtimeVotes } from './use-realtime-votes'
+export { useRealtimeSessions } from './use-realtime-sessions'
 
 export type { Event, AccessMode, VotingConfig, BudgetConfig } from './use-event'
 export type { Session, SessionHost } from './use-sessions'

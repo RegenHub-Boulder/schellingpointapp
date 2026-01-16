@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { useSessions, Session } from '@/hooks/use-sessions'
 import { useVotes } from '@/hooks/use-votes'
 import { useFavorites } from '@/hooks/use-favorites'
-import { useAuth } from '@/hooks'
+import { useAuth, useEvent, useRealtimeVotes } from '@/hooks'
 import { useOnChainVotes, useVoteMutation } from '@/hooks/useOnChainVotes'
 
 // Transform API session to UI format
@@ -60,8 +60,21 @@ export default function SessionsPage() {
   const router = useRouter()
   const { user, isLoggedIn } = useAuth()
 
+  // Fetch event for real-time subscription
+  const { event } = useEvent()
+
   // Fetch sessions with approved status (for public voting)
   const { sessions: apiSessions, loading, error, refetch: refetchSessions } = useSessions({ status: 'approved' })
+
+  // Real-time vote updates - refetch when votes change
+  useRealtimeVotes({
+    eventId: event?.id || '',
+    enabled: !!event?.id,
+    onVoteUpdate: () => {
+      // Refetch sessions to get updated vote counts
+      refetchSessions()
+    },
+  })
 
   // Fetch user's votes
   const { balance, getVoteForSession, castVote } = useVotes()
