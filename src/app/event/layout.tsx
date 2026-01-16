@@ -11,45 +11,49 @@ import { Badge } from '@/components/ui/badge'
 import { useEvent } from '@/hooks/use-event'
 import { useVotes } from '@/hooks/use-votes'
 import { useAuth } from '@/hooks/useAuth'
+import { useSessions } from '@/hooks/use-sessions'
 
-const tabs = [
-  {
-    label: 'Dashboard',
-    href: '/event/dashboard',
-    icon: <BarChart3 className="h-4 w-4" />,
-  },
-  {
-    label: 'Sessions',
-    href: '/event/sessions',
-    icon: <Presentation className="h-4 w-4" />,
-    badge: 24,
-  },
-  {
-    label: 'My Sessions',
-    href: '/event/my-sessions',
-    icon: <FileText className="h-4 w-4" />,
-  },
-  {
-    label: 'Schedule',
-    href: '/event/schedule',
-    icon: <Calendar className="h-4 w-4" />,
-  },
-  {
-    label: 'My Schedule',
-    href: '/event/my-schedule',
-    icon: <Heart className="h-4 w-4" />,
-  },
-  {
-    label: 'My Votes',
-    href: '/event/my-votes',
-    icon: <ClipboardList className="h-4 w-4" />,
-  },
-  {
-    label: 'Participants',
-    href: '/event/participants',
-    icon: <Users className="h-4 w-4" />,
-  },
-]
+// Create tabs with dynamic session count
+function getTabs(sessionCount?: number) {
+  return [
+    {
+      label: 'Dashboard',
+      href: '/event/dashboard',
+      icon: <BarChart3 className="h-4 w-4" />,
+    },
+    {
+      label: 'Sessions',
+      href: '/event/sessions',
+      icon: <Presentation className="h-4 w-4" />,
+      badge: sessionCount,
+    },
+    {
+      label: 'My Sessions',
+      href: '/event/my-sessions',
+      icon: <FileText className="h-4 w-4" />,
+    },
+    {
+      label: 'Schedule',
+      href: '/event/schedule',
+      icon: <Calendar className="h-4 w-4" />,
+    },
+    {
+      label: 'My Schedule',
+      href: '/event/my-schedule',
+      icon: <Heart className="h-4 w-4" />,
+    },
+    {
+      label: 'My Votes',
+      href: '/event/my-votes',
+      icon: <ClipboardList className="h-4 w-4" />,
+    },
+    {
+      label: 'Participants',
+      href: '/event/participants',
+      icon: <Users className="h-4 w-4" />,
+    },
+  ]
+}
 
 // Determine event status based on dates and flags
 function getEventStatus(event: {
@@ -110,8 +114,18 @@ export default function EventLayout({
   const { event, votingConfig, loading: eventLoading, error: eventError } = useEvent()
   const { balance, loading: votesLoading } = useVotes()
 
+  // Fetch approved sessions for the count (same filter as sessions page)
+  const { sessions, loading: sessionsLoading } = useSessions({ status: 'approved' })
+
   // Passkey-based auth
   const { user: authUser, isLoggedIn, isLoading: authLoading, logout } = useAuth()
+
+  // Create tabs with dynamic session count
+  const tabs = React.useMemo(() => {
+    // Only show count once sessions are loaded
+    const sessionCount = sessionsLoading ? undefined : sessions.length
+    return getTabs(sessionCount)
+  }, [sessions.length, sessionsLoading])
 
   // Route protection: redirect to login if not authenticated
   React.useEffect(() => {
