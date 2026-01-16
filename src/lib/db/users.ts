@@ -18,19 +18,6 @@ function getSupabase() {
   )
 }
 
-export async function getUserByInviteCode(code: string): Promise<User | null> {
-  const supabase = getSupabase()
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('invite_code', code)
-    .single()
-
-  // invite_code is nulled after registration, so if it exists, it's valid
-  if (error || !data) return null
-  return data
-}
-
 export async function getUserByPasskey(pubkeyX: string, pubkeyY: string): Promise<User | null> {
   const supabase = getSupabase()
 
@@ -64,15 +51,7 @@ export async function registerPasskey(
       credential_id: credentialId
     })
 
-  if (passkeyError) return false
-
-  // Burn the invite code
-  const { error: userError } = await supabase
-    .from('users')
-    .update({ invite_code: null })
-    .eq('id', userId)
-
-  return !userError
+  return !passkeyError
 }
 
 export async function getUserByCredentialId(credentialId: string): Promise<User | null> {
