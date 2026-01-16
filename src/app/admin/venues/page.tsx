@@ -39,15 +39,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useVenues, Venue } from '@/hooks/use-venues'
-
-interface TimeSlot {
-  id: string
-  startTime: string
-  endTime: string
-  type: 'session' | 'break' | 'locked'
-  label?: string
-  day: number
-}
+import { useTimeSlots, TimeSlot } from '@/hooks/use-time-slots'
 
 const featureIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   projector: Monitor,
@@ -71,34 +63,25 @@ const featureLabels: Record<string, string> = {
 
 const allFeatures = Object.keys(featureLabels)
 
-// Time slots are still managed locally for now (TODO: create time_slots API)
-const initialTimeSlots: TimeSlot[] = [
-  { id: '1', startTime: '09:00', endTime: '09:30', type: 'locked', label: 'Opening Ceremony', day: 1 },
-  { id: '2', startTime: '09:45', endTime: '10:45', type: 'session', day: 1 },
-  { id: '3', startTime: '11:00', endTime: '12:00', type: 'session', day: 1 },
-  { id: '4', startTime: '12:00', endTime: '13:00', type: 'break', label: 'Lunch', day: 1 },
-  { id: '5', startTime: '13:00', endTime: '14:30', type: 'session', day: 1 },
-  { id: '6', startTime: '14:45', endTime: '15:45', type: 'session', day: 1 },
-  { id: '7', startTime: '16:00', endTime: '17:00', type: 'session', day: 1 },
-  { id: '8', startTime: '17:15', endTime: '18:15', type: 'locked', label: 'Closing Remarks', day: 1 },
-  { id: '9', startTime: '09:00', endTime: '09:30', type: 'locked', label: 'Day 2 Kickoff', day: 2 },
-  { id: '10', startTime: '09:45', endTime: '10:45', type: 'session', day: 2 },
-  { id: '11', startTime: '11:00', endTime: '12:00', type: 'session', day: 2 },
-  { id: '12', startTime: '12:00', endTime: '13:00', type: 'break', label: 'Lunch', day: 2 },
-  { id: '13', startTime: '13:00', endTime: '14:30', type: 'session', day: 2 },
-  { id: '14', startTime: '14:45', endTime: '16:00', type: 'locked', label: 'Final Session & Awards', day: 2 },
-]
-
 export default function AdminVenuesPage() {
   // Use the venues hook for API integration
-  const { venues, loading, error, createVenue, updateVenue, deleteVenue, refetch } = useVenues()
+  const { venues, loading: venuesLoading, error: venuesError, createVenue, updateVenue, deleteVenue, refetch } = useVenues()
 
-  const [timeSlots, setTimeSlots] = React.useState(initialTimeSlots)
+  // Use the time slots hook for API integration
+  const {
+    timeSlots,
+    loading: timeSlotsLoading,
+    error: timeSlotsError,
+    createTimeSlot,
+    updateTimeSlot,
+    deleteTimeSlot,
+    refetch: refetchTimeSlots
+  } = useTimeSlots()
+
   const [editingVenue, setEditingVenue] = React.useState<Venue | null>(null)
   const [editingSlot, setEditingSlot] = React.useState<TimeSlot | null>(null)
   const [showAddVenue, setShowAddVenue] = React.useState(false)
   const [showAddSlot, setShowAddSlot] = React.useState(false)
-  const [selectedDay, setSelectedDay] = React.useState(1)
   const [saving, setSaving] = React.useState(false)
 
   // Form state for venues
@@ -113,7 +96,7 @@ export default function AdminVenuesPage() {
   // Form state for time slots
   const [slotStart, setSlotStart] = React.useState('')
   const [slotEnd, setSlotEnd] = React.useState('')
-  const [slotType, setSlotType] = React.useState<'session' | 'break' | 'locked'>('session')
+  const [slotIsAvailable, setSlotIsAvailable] = React.useState(true)
   const [slotLabel, setSlotLabel] = React.useState('')
 
   const resetVenueForm = () => {
@@ -127,7 +110,7 @@ export default function AdminVenuesPage() {
   const resetSlotForm = () => {
     setSlotStart('')
     setSlotEnd('')
-    setSlotType('session')
+    setSlotIsAvailable(true)
     setSlotLabel('')
     setEditingSlot(null)
     setShowAddSlot(false)
@@ -186,35 +169,52 @@ export default function AdminVenuesPage() {
     setEditingSlot(slot)
     setSlotStart(slot.startTime)
     setSlotEnd(slot.endTime)
-    setSlotType(slot.type)
+    setSlotIsAvailable(slot.isAvailable)
     setSlotLabel(slot.label || '')
     setShowAddSlot(true)
   }
 
-  const handleSaveSlot = () => {
+  const handleSaveSlot = async () => {
     if (!slotStart || !slotEnd) return
 
-    if (editingSlot) {
-      setTimeSlots(prev => prev.map(s =>
-        s.id === editingSlot.id
-          ? { ...s, startTime: slotStart, endTime: slotEnd, type: slotType, label: slotLabel || undefined }
-          : s
-      ))
-    } else {
-      setTimeSlots(prev => [...prev, {
-        id: Date.now().toString(),
-        startTime: slotStart,
-        endTime: slotEnd,
-        type: slotType,
-        label: slotLabel || undefined,
-        day: selectedDay,
-      }])
+    setSaving(true)
+    try {
+      if (editingSlot) {
+        const result = await updateTimeSlot(editingSlot.id, {
+          startTime: slotStart,
+          endTime: slotEnd,
+          isAvailable: slotIsAvailable,
+          label: slotLabel || undefined,
+        })
+        if (!result.success) {
+          alert(result.error || 'Failed to update time slot')
+          return
+        }
+      } else {
+        const result = await createTimeSlot({
+          startTime: slotStart,
+          endTime: slotEnd,
+          isAvailable: slotIsAvailable,
+          label: slotLabel || undefined,
+        })
+        if (!result.success) {
+          alert(result.error || 'Failed to create time slot')
+          return
+        }
+      }
+      resetSlotForm()
+    } finally {
+      setSaving(false)
     }
-    resetSlotForm()
   }
 
-  const handleDeleteSlot = (id: string) => {
-    setTimeSlots(prev => prev.filter(s => s.id !== id))
+  const handleDeleteSlot = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this time slot?')) return
+
+    const result = await deleteTimeSlot(id)
+    if (!result.success) {
+      alert(result.error || 'Failed to delete time slot')
+    }
   }
 
   const toggleFeature = (feature: string) => {
@@ -237,9 +237,13 @@ export default function AdminVenuesPage() {
 
   const allAvailableFeatures = [...allFeatures, ...customFeatures]
 
-  const daySlots = timeSlots.filter(s => s.day === selectedDay).sort((a, b) => a.startTime.localeCompare(b.startTime))
+  // Sort time slots by start time
+  const sortedSlots = [...timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime))
   const totalCapacity = venues.reduce((sum, v) => sum + v.capacity, 0)
-  const sessionSlots = timeSlots.filter(s => s.type === 'session')
+  const sessionSlots = timeSlots.filter(s => s.isAvailable)
+
+  const loading = venuesLoading || timeSlotsLoading
+  const error = venuesError || timeSlotsError
 
   // Loading state
   if (loading) {
@@ -254,8 +258,8 @@ export default function AdminVenuesPage() {
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-destructive mb-4">Failed to load venues: {error}</p>
-        <Button onClick={() => refetch()}>Try again</Button>
+        <p className="text-destructive mb-4">Failed to load data: {error}</p>
+        <Button onClick={() => { refetch(); refetchTimeSlots(); }}>Try again</Button>
       </div>
     )
   }
@@ -389,21 +393,7 @@ export default function AdminVenuesPage() {
       {/* Time Slots Section */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-4">
-            <CardTitle className="text-base">Time Slots</CardTitle>
-            <div className="flex gap-1">
-              {[1, 2].map(day => (
-                <Button
-                  key={day}
-                  variant={selectedDay === day ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setSelectedDay(day)}
-                >
-                  Day {day}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <CardTitle className="text-base">Time Slots</CardTitle>
           <Button size="sm" onClick={() => setShowAddSlot(true)}>
             <Plus className="h-4 w-4 mr-1" />
             Add Slot
@@ -411,13 +401,12 @@ export default function AdminVenuesPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {daySlots.map(slot => (
+            {sortedSlots.map(slot => (
               <div
                 key={slot.id}
                 className={cn(
                   'flex items-center justify-between p-3 rounded-lg border',
-                  slot.type === 'break' && 'bg-amber-50 border-amber-200',
-                  slot.type === 'locked' && 'bg-muted'
+                  !slot.isAvailable && 'bg-muted'
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -425,14 +414,10 @@ export default function AdminVenuesPage() {
                     {slot.startTime} - {slot.endTime}
                   </div>
                   <Badge
-                    variant={
-                      slot.type === 'session' ? 'default' :
-                      slot.type === 'break' ? 'secondary' : 'outline'
-                    }
+                    variant={slot.isAvailable ? 'default' : 'outline'}
                     className="text-xs"
                   >
-                    {slot.type === 'session' ? 'Session' :
-                     slot.type === 'break' ? 'Break' : 'Locked'}
+                    {slot.isAvailable ? 'Available' : 'Unavailable'}
                   </Badge>
                   {slot.label && (
                     <span className="text-sm text-muted-foreground">{slot.label}</span>
@@ -454,9 +439,9 @@ export default function AdminVenuesPage() {
               </div>
             ))}
 
-            {daySlots.length === 0 && (
+            {sortedSlots.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                No time slots for Day {selectedDay}. Add slots to define the schedule structure.
+                No time slots configured yet. Add slots to define the schedule structure.
               </div>
             )}
           </div>
@@ -567,7 +552,7 @@ export default function AdminVenuesPage() {
           <ModalHeader>
             <ModalTitle>{editingSlot ? 'Edit Time Slot' : 'Add Time Slot'}</ModalTitle>
             <ModalDescription>
-              Configure the time slot for Day {selectedDay}.
+              Configure the time slot for scheduling sessions.
             </ModalDescription>
           </ModalHeader>
           <div className="px-6 pb-6 space-y-4">
@@ -591,37 +576,43 @@ export default function AdminVenuesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Slot Type</label>
-              <Select value={slotType} onValueChange={(v) => setSlotType(v as typeof slotType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="session">Session (available for scheduling)</SelectItem>
-                  <SelectItem value="break">Break (lunch, coffee, etc.)</SelectItem>
-                  <SelectItem value="locked">Locked (opening/closing ceremonies)</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Label (optional)</label>
+              <Input
+                placeholder="e.g., Morning Block, Lunch Break"
+                value={slotLabel}
+                onChange={(e) => setSlotLabel(e.target.value)}
+              />
             </div>
 
-            {(slotType === 'break' || slotType === 'locked') && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Label</label>
-                <Input
-                  placeholder="e.g., Lunch Break"
-                  value={slotLabel}
-                  onChange={(e) => setSlotLabel(e.target.value)}
-                />
+            <label
+              className={cn(
+                'flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors',
+                slotIsAvailable ? 'bg-primary/10 border-primary' : 'hover:bg-muted'
+              )}
+            >
+              <Checkbox
+                checked={slotIsAvailable}
+                onCheckedChange={(checked) => setSlotIsAvailable(checked === true)}
+              />
+              <div>
+                <span className="text-sm font-medium">Available for Sessions</span>
+                <p className="text-xs text-muted-foreground">
+                  Uncheck for breaks, ceremonies, or other locked time slots
+                </p>
               </div>
-            )}
+            </label>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button variant="outline" onClick={resetSlotForm}>
+              <Button variant="outline" onClick={resetSlotForm} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveSlot} disabled={!slotStart || !slotEnd}>
-                <Save className="h-4 w-4 mr-1" />
-                {editingSlot ? 'Save Changes' : 'Add Slot'}
+              <Button onClick={handleSaveSlot} disabled={!slotStart || !slotEnd || saving}>
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1" />
+                )}
+                {saving ? 'Saving...' : editingSlot ? 'Save Changes' : 'Add Slot'}
               </Button>
             </div>
           </div>
