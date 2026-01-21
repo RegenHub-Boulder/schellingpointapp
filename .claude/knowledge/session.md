@@ -469,3 +469,38 @@ File: `/src/app/login/page.tsx`
 **Files**: src/contexts/AuthContext.tsx, src/app/register/page.tsx, src/app/login/page.tsx, src/types/auth.ts
 ---
 
+### [19:27] [testing] Critical broken user flows identified
+**Details**: E2E testing analysis revealed critical issues:
+
+1. JWT Authentication Missing (BLOCKER):
+   - verifyJWT() function doesn't exist
+   - jsonwebtoken not in dependencies
+   - All JWT-protected endpoints fail (pre-voting, session proposal)
+
+2. Admin Role Check Missing (SECURITY):
+   - /admin/layout.tsx only checks isLoggedIn, not is_admin
+   - Any authenticated user can access admin pages
+
+3. Session Proposal Auth Header Missing:
+   - /event/propose/page.tsx doesn't send Authorization header
+   - All proposals fail with 401
+
+4. Distribution Execution is Fake:
+   - Uses setTimeout(3000) instead of API call
+   - /api/events/{slug}/distribution/execute doesn't exist
+
+5. Favorites Not Persisted:
+   - No database table for favorites
+   - localStorage only for non-auth users
+   - On-chain votes conflated with favorites (value=1)
+
+6. Status Value Mismatch:
+   - TypeScript: 'proposed'/'declined'
+   - Database: 'pending'/'rejected'
+
+7. Track Field Lost:
+   - Collected in UI but not sent to API
+   - Database has no track column
+**Files**: src/app/admin/layout.tsx, src/app/event/propose/page.tsx, src/app/api/events/[slug]/votes/me/route.ts, src/app/admin/distribution/page.tsx
+---
+
