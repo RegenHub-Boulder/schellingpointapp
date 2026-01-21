@@ -539,6 +539,7 @@ export type Database = {
           time_slot_id: string | null
           title: string
           topic_tags: string[] | null
+          track: string | null
           updated_at: string | null
           venue_id: string | null
         }
@@ -558,6 +559,7 @@ export type Database = {
           time_slot_id?: string | null
           title: string
           topic_tags?: string[] | null
+          track?: string | null
           updated_at?: string | null
           venue_id?: string | null
         }
@@ -577,6 +579,7 @@ export type Database = {
           time_slot_id?: string | null
           title?: string
           topic_tags?: string[] | null
+          track?: string | null
           updated_at?: string | null
           venue_id?: string | null
         }
