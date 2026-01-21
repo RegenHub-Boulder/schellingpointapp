@@ -35,7 +35,8 @@ export interface Event {
 
 // Session Types
 export type SessionFormat = 'talk' | 'workshop' | 'discussion' | 'panel' | 'demo'
-export type SessionStatus = 'proposed' | 'approved' | 'declined' | 'merged' | 'scheduled' | 'completed' | 'self-hosted'
+// Status values match database: pending (not proposed), rejected (not declined)
+export type SessionStatus = 'pending' | 'approved' | 'rejected' | 'merged' | 'scheduled' | 'completed' | 'self-hosted' | 'cancelled'
 
 // Track type for categorizing sessions
 export type SessionTrack =
