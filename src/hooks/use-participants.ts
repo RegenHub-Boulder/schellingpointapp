@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { EVENT_SLUG } from '@/lib/config'
+import { useAuth } from './useAuth'
 
 export interface Participant {
   user: {
@@ -31,11 +32,19 @@ interface UseParticipantsReturn {
 }
 
 export function useParticipants(options: UseParticipantsOptions = {}): UseParticipantsReturn {
+  const { token, isLoggedIn } = useAuth()
   const [participants, setParticipants] = useState<Participant[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchParticipants = useCallback(async () => {
+    if (!isLoggedIn || !token) {
+      setError('Please sign in to view participants')
+      setParticipants([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -51,7 +60,11 @@ export function useParticipants(options: UseParticipantsOptions = {}): UsePartic
       const queryString = params.toString()
       const url = `/api/events/${EVENT_SLUG}/participants${queryString ? `?${queryString}` : ''}`
 
-      const response = await fetch(url)
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
 
       if (response.status === 401) {
         setError('Please sign in to view participants')
@@ -79,7 +92,7 @@ export function useParticipants(options: UseParticipantsOptions = {}): UsePartic
     } finally {
       setLoading(false)
     }
-  }, [options.checkedIn, options.isAdmin])
+  }, [options.checkedIn, options.isAdmin, token, isLoggedIn])
 
   useEffect(() => {
     fetchParticipants()
