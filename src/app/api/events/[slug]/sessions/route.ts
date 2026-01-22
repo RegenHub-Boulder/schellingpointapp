@@ -139,6 +139,7 @@ export async function GET(
     description: session.description,
     format: session.format,
     duration: session.duration,
+    track: session.track,
     maxParticipants: session.max_participants,
     technicalRequirements: session.technical_requirements,
     topicTags: session.topic_tags,
@@ -215,11 +216,20 @@ export async function POST(
   }
 
   // Validate required fields
-  const { title, description, format, duration, maxParticipants, technicalRequirements, topicTags, coHosts } = body
+  const { title, description, format, duration, track, maxParticipants, technicalRequirements, topicTags, coHosts } = body
 
   if (!title || !description || !format || !duration) {
     return NextResponse.json(
       { error: 'Missing required fields: title, description, format, duration' },
+      { status: 400 }
+    )
+  }
+
+  // Validate track if provided
+  const validTracks = ['governance', 'technical', 'defi', 'social', 'creative', 'sustainability']
+  if (track && !validTracks.includes(track)) {
+    return NextResponse.json(
+      { error: `Invalid track. Must be one of: ${validTracks.join(', ')}` },
       { status: 400 }
     )
   }
@@ -255,6 +265,7 @@ export async function POST(
       description,
       format,
       duration,
+      track: track || null,
       max_participants: maxParticipants,
       technical_requirements: technicalRequirements || [],
       topic_tags: topicTags || [],

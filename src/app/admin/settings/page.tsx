@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Save, Bell, Calendar, DollarSign, Users, Shield, Zap } from 'lucide-react'
+import { Save, Bell, Calendar, DollarSign, Users, Shield, Zap, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -12,8 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useAuth } from '@/hooks/useAuth'
+import { EVENT_SLUG } from '@/lib/config'
 
 export default function AdminSettingsPage() {
+  const { token } = useAuth()
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [isSaving, setIsSaving] = React.useState(false)
+  const [saveStatus, setSaveStatus] = React.useState<'idle' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+
   const [settings, setSettings] = React.useState({
     // Event Settings
     eventName: 'EthBoulder 2026',
@@ -43,6 +51,32 @@ export default function AdminSettingsPage() {
     autoSchedule: false,
   })
 
+  // Load settings on mount
+  React.useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch(`/api/events/${EVENT_SLUG}/settings`)
+        if (response.ok) {
+          const data = await response.json()
+          setSettings(prev => ({
+            ...prev,
+            eventName: data.settings.eventName || prev.eventName,
+            votingCreditsPerUser: data.settings.preVoteCredits || prev.votingCreditsPerUser,
+            sessionBudget: data.settings.totalBudgetPool || prev.sessionBudget,
+            votingDeadline: data.settings.preVoteDeadline
+              ? new Date(data.settings.preVoteDeadline).toISOString().slice(0, 16)
+              : prev.votingDeadline,
+          }))
+        }
+      } catch (err) {
+        console.error('Failed to load settings:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
   const handleToggle = (key: keyof typeof settings) => {
     setSettings((prev) => ({
       ...prev,
@@ -57,9 +91,45 @@ export default function AdminSettingsPage() {
     }))
   }
 
-  const handleSave = () => {
-    console.log('Saving settings:', settings)
-    // In real app, this would save to API
+  const handleSave = async () => {
+    if (!token) {
+      setErrorMessage('Authentication required')
+      setSaveStatus('error')
+      return
+    }
+
+    setIsSaving(true)
+    setSaveStatus('idle')
+    setErrorMessage(null)
+
+    try {
+      const response = await fetch(`/api/events/${EVENT_SLUG}/settings`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          eventName: settings.eventName,
+          preVoteCredits: settings.votingCreditsPerUser,
+          totalBudgetPool: settings.sessionBudget,
+          preVoteDeadline: settings.votingDeadline ? new Date(settings.votingDeadline).toISOString() : null,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to save settings')
+      }
+
+      setSaveStatus('success')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save settings')
+      setSaveStatus('error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -72,10 +142,28 @@ export default function AdminSettingsPage() {
             Configure event settings and preferences
           </p>
         </div>
-        <Button onClick={handleSave}>
-          <Save className="h-4 w-4 mr-2" />
-          Save All Changes
-        </Button>
+        <div className="flex items-center gap-3">
+          {saveStatus === 'success' && (
+            <span className="text-sm text-green-600 flex items-center gap-1">
+              <CheckCircle className="h-4 w-4" />
+              Saved
+            </span>
+          )}
+          {saveStatus === 'error' && errorMessage && (
+            <span className="text-sm text-destructive flex items-center gap-1">
+              <AlertCircle className="h-4 w-4" />
+              {errorMessage}
+            </span>
+          )}
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save All Changes
+          </Button>
+        </div>
       </div>
 
       {/* Event Information */}
@@ -390,8 +478,12 @@ export default function AdminSettingsPage() {
       {/* Save Button */}
       <div className="flex justify-end gap-3">
         <Button variant="outline">Reset to Defaults</Button>
-        <Button onClick={handleSave}>
-          <Save className="h-4 w-4 mr-2" />
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4 mr-2" />
+          )}
           Save All Changes
         </Button>
       </div>

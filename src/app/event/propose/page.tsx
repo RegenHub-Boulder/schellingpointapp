@@ -67,7 +67,7 @@ const suggestedTags = [
 
 export default function ProposeSessionPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, token, isLoggedIn } = useAuth()
   const [currentStep, setCurrentStep] = React.useState(1)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isSubmitted, setIsSubmitted] = React.useState(false)
@@ -123,7 +123,7 @@ export default function ProposeSessionPage() {
   }
 
   const handleSubmit = async () => {
-    if (!user) {
+    if (!isLoggedIn || !token) {
       setError('You must be signed in to propose a session')
       return
     }
@@ -144,12 +144,14 @@ export default function ProposeSessionPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           title,
           description,
           format,
           duration,
+          track,
           maxParticipants: maxParticipants ? parseInt(maxParticipants) : null,
           technicalRequirements: requirements.map(r => techRequirementsMap[r] || r),
           topicTags: tags,
@@ -541,7 +543,7 @@ export default function ProposeSessionPage() {
               </div>
             )}
 
-            {!user && (
+            {!isLoggedIn && (
               <div className="p-4 rounded-lg border bg-amber-500/5 border-amber-500/20 flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm">

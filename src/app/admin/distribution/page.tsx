@@ -9,6 +9,8 @@ import { Progress } from '@/components/ui/progress'
 import { formatCurrency, truncateAddress } from '@/lib/utils'
 import { useEvent } from '@/hooks/use-event'
 import { useSessions, Session } from '@/hooks/use-sessions'
+import { useAuth } from '@/hooks/useAuth'
+import { EVENT_SLUG } from '@/lib/config'
 
 interface DistributionRow {
   session: Session
@@ -22,10 +24,13 @@ interface DistributionRow {
 export default function AdminDistributionPage() {
   const { event, budgetConfig, loading: eventLoading, error: eventError } = useEvent()
   const { sessions, loading: sessionsLoading, error: sessionsError } = useSessions({ status: 'scheduled' })
+  const { token } = useAuth()
 
   const [isExecuting, setIsExecuting] = React.useState(false)
   const [executed, setExecuted] = React.useState(false)
   const [confirmed, setConfirmed] = React.useState(false)
+  const [txHash, setTxHash] = React.useState<string | null>(null)
+  const [executeError, setExecuteError] = React.useState<string | null>(null)
 
   const loading = eventLoading || sessionsLoading
   const error = eventError || sessionsError
@@ -86,13 +91,37 @@ export default function AdminDistributionPage() {
   const totalVotesCast = distributionData.reduce((sum, d) => sum + d.votes, 0)
   const totalVoters = new Set(sessions.flatMap(s => s.preVoteStats?.totalVoters || 0))
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
+    if (!token) {
+      setExecuteError('Authentication required')
+      return
+    }
+
     setIsExecuting(true)
-    // In production, this would call an API to execute the distribution
-    setTimeout(() => {
-      setIsExecuting(false)
+    setExecuteError(null)
+
+    try {
+      const response = await fetch(`/api/events/${EVENT_SLUG}/distribution/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Distribution failed')
+      }
+
+      setTxHash(data.distribution?.txHash || null)
       setExecuted(true)
-    }, 3000)
+    } catch (err) {
+      setExecuteError(err instanceof Error ? err.message : 'Distribution failed')
+    } finally {
+      setIsExecuting(false)
+    }
   }
 
   // Loading state
@@ -391,6 +420,13 @@ export default function AdminDistributionPage() {
                 </Button>
               </div>
             </div>
+
+            {executeError && (
+              <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <p className="text-sm text-destructive">{executeError}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -407,17 +443,25 @@ export default function AdminDistributionPage() {
                   {formatCurrency(distributable)} distributed to {uniqueHosts.size} hosts
                 </p>
 
-                <div className="mt-4 p-3 rounded-lg bg-white/50">
-                  <div className="text-xs text-muted-foreground mb-1">Transaction</div>
-                  <div className="flex items-center gap-2">
-                    <code className="text-sm font-mono">
-                      {truncateAddress('0x789def123abc456789def123abc456789def123abc', 8)}
-                    </code>
-                    <Button variant="ghost" size="sm" className="h-auto p-1">
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
+                {txHash && (
+                  <div className="mt-4 p-3 rounded-lg bg-white/50">
+                    <div className="text-xs text-muted-foreground mb-1">Transaction</div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm font-mono">
+                        {truncateAddress(txHash, 8)}
+                      </code>
+                      <a
+                        href={`https://basescan.org/tx/${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Button variant="ghost" size="sm" className="h-auto p-1">
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      </a>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <Button variant="outline" className="mt-4">
                   Download Report

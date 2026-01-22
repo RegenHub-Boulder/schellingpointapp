@@ -58,7 +58,7 @@ interface Session {
   hostEmail: string
   format: 'talk' | 'workshop' | 'discussion' | 'panel' | 'demo'
   track: SessionTrack | null
-  status: 'pending' | 'approved' | 'declined' | 'changes_requested' | 'rejected' | 'scheduled'
+  status: 'pending' | 'approved' | 'rejected' | 'merged' | 'scheduled' | 'completed' | 'cancelled'
   votes: number
   voters: number
   durationMinutes: number
@@ -447,7 +447,7 @@ export default function AdminSessionsPage() {
                                 Approve
                               </DropdownMenuItem>
                             )}
-                            {session.status !== 'declined' && (
+                            {session.status !== 'rejected' && (
                               <DropdownMenuItem onClick={() => handleDecline(session.id)}>
                                 Decline
                               </DropdownMenuItem>

@@ -16,6 +16,8 @@ import {
   Loader2,
   AlertTriangle,
   Wallet,
+  Eye,
+  Save,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -26,15 +28,44 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalTitle,
+  ModalDescription,
+  ModalFooter,
+} from '@/components/ui/modal'
 import { useParticipants, Participant } from '@/hooks/use-participants'
 import { useEvent } from '@/hooks/use-event'
+import { useAuth } from '@/hooks/useAuth'
+
+const EVENT_SLUG = 'ethdenver-2025'
 
 export default function AdminParticipantsPage() {
   const { event, loading: eventLoading } = useEvent()
-  const { participants, loading: participantsLoading, error } = useParticipants()
+  const { participants, loading: participantsLoading, error, refetch } = useParticipants()
+  const { token } = useAuth()
 
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'checked-in' | 'not-checked-in' | 'admins'>('all')
+
+  // Modal states
+  const [selectedParticipant, setSelectedParticipant] = React.useState<Participant | null>(null)
+  const [viewModalOpen, setViewModalOpen] = React.useState(false)
+  const [editModalOpen, setEditModalOpen] = React.useState(false)
+  const [revokeModalOpen, setRevokeModalOpen] = React.useState(false)
+  const [actionLoading, setActionLoading] = React.useState(false)
+  const [actionError, setActionError] = React.useState<string | null>(null)
+
+  // Edit form state
+  const [editForm, setEditForm] = React.useState({
+    displayName: '',
+    email: '',
+    payoutAddress: '',
+    isAdmin: false,
+    checkedIn: false,
+  })
 
   const loading = eventLoading || participantsLoading
 
@@ -67,6 +98,106 @@ export default function AdminParticipantsPage() {
       admins: participants.filter((p) => p.isAdmin).length,
     }
   }, [participants])
+
+  // Handler to open view profile modal
+  const handleViewProfile = (participant: Participant) => {
+    setSelectedParticipant(participant)
+    setActionError(null)
+    setViewModalOpen(true)
+  }
+
+  // Handler to open edit modal
+  const handleEditDetails = (participant: Participant) => {
+    setSelectedParticipant(participant)
+    setEditForm({
+      displayName: participant.user.displayName || '',
+      email: participant.user.email || '',
+      payoutAddress: participant.user.walletAddress || '',
+      isAdmin: participant.isAdmin,
+      checkedIn: participant.checkedIn,
+    })
+    setActionError(null)
+    setEditModalOpen(true)
+  }
+
+  // Handler to save edited details
+  const handleSaveEdit = async () => {
+    if (!selectedParticipant || !token) return
+
+    setActionLoading(true)
+    setActionError(null)
+
+    try {
+      const response = await fetch(
+        `/api/events/${EVENT_SLUG}/access/${selectedParticipant.user.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            displayName: editForm.displayName || undefined,
+            email: editForm.email || undefined,
+            payoutAddress: editForm.payoutAddress || undefined,
+            isAdmin: editForm.isAdmin,
+            checkedIn: editForm.checkedIn,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update participant')
+      }
+
+      setEditModalOpen(false)
+      refetch?.()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Handler to open revoke modal
+  const handleRevokeAccess = (participant: Participant) => {
+    setSelectedParticipant(participant)
+    setActionError(null)
+    setRevokeModalOpen(true)
+  }
+
+  // Handler to confirm revoke
+  const handleConfirmRevoke = async () => {
+    if (!selectedParticipant || !token) return
+
+    setActionLoading(true)
+    setActionError(null)
+
+    try {
+      const response = await fetch(
+        `/api/events/${EVENT_SLUG}/access/${selectedParticipant.user.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to revoke access')
+      }
+
+      setRevokeModalOpen(false)
+      refetch?.()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   // Loading state
   if (loading) {
@@ -290,25 +421,24 @@ export default function AdminParticipantsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem disabled>
+                          <DropdownMenuItem onClick={() => handleEditDetails(participant)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem disabled>
-                            <User className="h-4 w-4 mr-2" />
+                          <DropdownMenuItem onClick={() => handleViewProfile(participant)}>
+                            <Eye className="h-4 w-4 mr-2" />
                             View Profile
                           </DropdownMenuItem>
                           <DropdownMenuItem disabled>
                             <Mail className="h-4 w-4 mr-2" />
                             Send Email
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive" disabled>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => handleRevokeAccess(participant)}
+                          >
                             <Ban className="h-4 w-4 mr-2" />
                             Revoke Access
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive" disabled>
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -354,6 +484,237 @@ export default function AdminParticipantsPage() {
           </Button>
         </div>
       )}
+
+      {/* View Profile Modal */}
+      <Modal open={viewModalOpen} onOpenChange={setViewModalOpen}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Participant Profile</ModalTitle>
+            <ModalDescription>
+              View participant details
+            </ModalDescription>
+          </ModalHeader>
+          {selectedParticipant && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                  {selectedParticipant.user.avatar ? (
+                    <img
+                      src={selectedParticipant.user.avatar}
+                      alt={selectedParticipant.user.displayName || 'User'}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">
+                    {selectedParticipant.user.displayName || 'Anonymous'}
+                  </h3>
+                  {selectedParticipant.isAdmin && (
+                    <Badge variant="default" className="mt-1">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      Admin
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {selectedParticipant.user.email && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span>{selectedParticipant.user.email}</span>
+                  </div>
+                )}
+                {selectedParticipant.user.walletAddress && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Wallet className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-xs">{selectedParticipant.user.walletAddress}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                  <span>
+                    Status: {selectedParticipant.checkedIn ? 'Checked In' : 'Not Checked In'}
+                  </span>
+                </div>
+                {selectedParticipant.checkedInAt && (
+                  <div className="text-sm text-muted-foreground pl-6">
+                    Checked in at: {new Date(selectedParticipant.checkedInAt).toLocaleString()}
+                  </div>
+                )}
+                {selectedParticipant.burnerCardId && (
+                  <div className="text-sm text-muted-foreground">
+                    Burner Card ID: {selectedParticipant.burnerCardId}
+                  </div>
+                )}
+                <div className="text-sm text-muted-foreground">
+                  Access granted: {new Date(selectedParticipant.grantedAt).toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+          )}
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setViewModalOpen(false)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Edit Details Modal */}
+      <Modal open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Edit Participant</ModalTitle>
+            <ModalDescription>
+              Update participant details and permissions
+            </ModalDescription>
+          </ModalHeader>
+          <div className="space-y-4">
+            {actionError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
+                {actionError}
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium">Display Name</label>
+              <input
+                type="text"
+                value={editForm.displayName}
+                onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
+                className="w-full mt-1 h-10 px-3 rounded-md border border-input bg-background text-sm"
+                placeholder="Enter display name"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Email</label>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                className="w-full mt-1 h-10 px-3 rounded-md border border-input bg-background text-sm"
+                placeholder="Enter email"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Payout Address</label>
+              <input
+                type="text"
+                value={editForm.payoutAddress}
+                onChange={(e) => setEditForm({ ...editForm, payoutAddress: e.target.value })}
+                className="w-full mt-1 h-10 px-3 rounded-md border border-input bg-background text-sm font-mono text-xs"
+                placeholder="0x..."
+              />
+            </div>
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editForm.isAdmin}
+                  onChange={(e) => setEditForm({ ...editForm, isAdmin: e.target.checked })}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Admin
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editForm.checkedIn}
+                  onChange={(e) => setEditForm({ ...editForm, checkedIn: e.target.checked })}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Checked In
+              </label>
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setEditModalOpen(false)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={actionLoading}>
+              {actionLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Revoke Access Modal */}
+      <Modal open={revokeModalOpen} onOpenChange={setRevokeModalOpen}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Revoke Access</ModalTitle>
+            <ModalDescription>
+              Are you sure you want to revoke access for this participant?
+            </ModalDescription>
+          </ModalHeader>
+          {selectedParticipant && (
+            <div className="py-4">
+              {actionError && (
+                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
+                  {actionError}
+                </div>
+              )}
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                  {selectedParticipant.user.avatar ? (
+                    <img
+                      src={selectedParticipant.user.avatar}
+                      alt={selectedParticipant.user.displayName || 'User'}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <div className="font-medium">
+                    {selectedParticipant.user.displayName || selectedParticipant.user.email || 'Anonymous'}
+                  </div>
+                  {selectedParticipant.user.email && (
+                    <div className="text-sm text-muted-foreground">
+                      {selectedParticipant.user.email}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-muted-foreground">
+                This action will remove the participant from the event. They will need to be re-invited to regain access.
+              </p>
+            </div>
+          )}
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setRevokeModalOpen(false)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmRevoke} disabled={actionLoading}>
+              {actionLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Revoking...
+                </>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Revoke Access
+                </>
+              )}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   )
 }

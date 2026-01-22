@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { getAssetPath } from '@/lib/asset-path'
 import { useAuth } from '@/hooks/useAuth'
+import { useEventAccess } from '@/hooks/useEventAccess'
+import { ShieldAlert } from 'lucide-react'
 
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -48,20 +50,40 @@ export default function AdminLayout({
   const pathname = usePathname()
   const router = useRouter()
   const { isLoggedIn, isLoading: authLoading } = useAuth()
+  const { access, isLoading: accessLoading } = useEventAccess()
 
   // Route protection: redirect to login if not authenticated
-  // TODO: Add admin role check once event_access.is_admin is integrated
   React.useEffect(() => {
     if (!authLoading && !isLoggedIn) {
       router.replace('/login')
     }
   }, [authLoading, isLoggedIn, router])
 
-  // Show loading while checking auth or redirecting
-  if (authLoading || !isLoggedIn) {
+  // Show loading while checking auth or access
+  if (authLoading || !isLoggedIn || accessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Show access denied if not an admin
+  if (!access?.isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
+            <ShieldAlert className="h-8 w-8 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
+          <p className="text-muted-foreground mb-6">
+            You don't have admin privileges for this event. Please contact an event organizer if you believe this is an error.
+          </p>
+          <Button onClick={() => router.push('/event/sessions')}>
+            Return to Event
+          </Button>
+        </div>
       </div>
     )
   }
