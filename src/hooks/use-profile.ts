@@ -43,7 +43,10 @@ export function useProfile(): UseProfileReturn {
     setError(null)
 
     try {
-      const response = await fetch('/api/profile')
+      const token = localStorage.getItem('authToken')
+      const response = await fetch('/api/profile', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
 
       if (response.status === 401) {
         setError('Please sign in to view your profile')
@@ -68,11 +71,13 @@ export function useProfile(): UseProfileReturn {
 
   const updateProfile = useCallback(async (data: ProfileUpdate): Promise<{ success: boolean; error?: string }> => {
     try {
+      const token = localStorage.getItem('authToken')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
       const response = await fetch('/api/profile', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(data),
       })
 
