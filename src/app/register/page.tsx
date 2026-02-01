@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Container } from '@/components/layout/container'
 import { Input } from '@/components/ui/input'
+import Link from 'next/link'
 import { extractPublicKey, arrayBufferToBase64Url } from '@/lib/webauthn'
 import { useAuthFlow } from '@/hooks/useAuthFlow'
 import { useAuth } from '@/contexts/AuthContext'
@@ -273,10 +274,16 @@ function RegisterContent() {
 
               <div className="text-xs text-center text-muted-foreground space-y-2">
                 <p>
-                  We'll send you a magic link to verify your email address.
+                  We&apos;ll send you a magic link to verify your email address.
                 </p>
                 <p>
-                  After verification, you'll create a passkey to secure your account.
+                  After verification, you&apos;ll create a passkey to secure your account.
+                </p>
+                <p>
+                  Already have a passkey?{' '}
+                  <Link href="/login" className="text-primary hover:underline font-medium">
+                    Sign in
+                  </Link>
                 </p>
               </div>
             </CardContent>
@@ -413,6 +420,12 @@ function RegisterContent() {
               </p>
               <p>
                 This creates a secure passkey that stays on your device.
+              </p>
+              <p>
+                Already have a passkey?{' '}
+                <Link href="/login" className="text-primary hover:underline font-medium">
+                  Sign in
+                </Link>
               </p>
             </div>
           </CardContent>

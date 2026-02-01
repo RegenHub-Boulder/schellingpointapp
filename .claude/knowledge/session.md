@@ -502,5 +502,549 @@ File: `/src/app/login/page.tsx`
    - Collected in UI but not sent to API
    - Database has no track column
 **Files**: src/app/admin/layout.tsx, src/app/event/propose/page.tsx, src/app/api/events/[slug]/votes/me/route.ts, src/app/admin/distribution/page.tsx
+### [18:52] [auth] JWT vs Passkey Authentication Architecture
+**Details**: The codebase uses a HYBRID authentication system combining JWTs with passkey-based authentication:
+
+**JWT System** (/src/lib/jwt.ts):
+- Signs JWTs with 24-hour expiry using HS256
+- JWT payload includes: sub (user.id), pubKeyX, pubKeyY, displayName, email, signerAddress, signerExpiry
+- Used for protecting API endpoints via Bearer tokens in Authorization headers
+- NOT used for session management - purely for API authentication
+
+**Passkey System**:
+- WebAuthn P-256 passkeys (Face ID/Touch ID) for identity
+- Public key coordinates (pubKeyX, pubKeyY) stored in user_passkeys table
+- Serves as "Gate 1" validation on all sensitive API endpoints
+
+**Ephemeral Signer**:
+- Generated during authorization (7-day TTL)
+- Private key stored in localStorage
+- On-chain authorized via authorizeSigner contract call
+- Serves as "Gate 2" validation for voting endpoints
+
+**Multi-Gate Security**:
+1. Registration: Email → Supabase session cookie → Passkey creation
+2. Authorization: Generate ephemeral signer → Sign passkey auth message → Call contract → Store private key
+3. Login: Get challenge → Sign with ephemeral signer → Verify on-chain → Issue JWT
+4. Voting: JWT in Bearer header + on-chain signer expiry check
+
+**Storage Locations**:
+- localStorage.passkeyInfo: {credentialId, userId, pubKeyX, pubKeyY}
+- localStorage.sessionKey: {privateKey, address, expiry}
+- localStorage.authToken: JWT token (24h TTL)
+- Supabase session cookie: From Supabase auth (magic link)
+- user_passkeys table: persistently stores passkey credentials
+**Files**: src/lib/jwt.ts, src/hooks/useAuthFlow.ts, src/contexts/AuthContext.tsx, src/app/api/login/route.ts
+---
+
+### [18:52] [api] API Route Authentication Protection Pattern
+**Details**: All API routes follow a consistent multi-gate validation pattern:
+
+**Gate 1 Routes** (passkey validation only - no JWT needed):
+- POST /api/register: Validates Supabase session cookie, registers passkey
+- POST /api/authorize: Validates passkey in DB via getUserByPasskey()
+- POST /api/nonce: Read-only, no validation needed
+- POST /api/auth/lookup: Accepts credentialId, returns user data
+- POST /api/login/challenge: No validation, returns signed challenge
+
+**Gate 1 + Gate 2 Routes** (passkey + on-chain signer):
+- POST /api/vote: Checks passkey in DB + validates signer expiry on-chain
+- POST /api/vote/batch: Same as /api/vote
+
+**JWT-Protected Routes** (Bearer token validation):
+- GET /api/auth/me: Validates JWT token, returns user from DB
+- GET /api/events/:slug/sessions (with mine=true): Validates JWT, filters user's sessions
+- POST /api/events/:slug/sessions: Validates JWT, creates session for user
+- PATCH /api/profile: Validates JWT, updates user profile
+- GET /api/profile: Validates JWT, returns user profile
+
+**Auth Header Pattern**:
+```typescript
+// Routes check: Authorization: Bearer <jwt_token>
+const authHeader = request.headers.get('Authorization')
+if (!authHeader?.startsWith('Bearer ')) {
+  return 401 Unauthorized
+}
+const token = authHeader.substring(7)
+const payload = await verifyJWT(token)
+if (!payload) return 401
+```
+
+**No Middleware**: No Next.js middleware file exists. Auth is per-route.
+**Files**: src/app/api/vote/route.ts, src/app/api/profile/route.ts, src/app/api/events/[slug]/sessions/route.ts, src/app/api/login/route.ts
+---
+
+### [18:52] [frontend] Frontend Auth Flow and Credential Management
+**Details**: **Registration Flow** (/src/app/register/page.tsx):
+1. Send magic link via Supabase auth.signInWithOtp() → sets session cookie
+2. User clicks link → /auth/callback exchanges code for session
+3. User creates WebAuthn passkey via navigator.credentials.create()
+4. Extract P-256 public key (pubKeyX, pubKeyY) from attestationObject
+5. POST /api/register with {pubKeyX, pubKeyY, credentialId}
+6. Store in localStorage.passkeyInfo
+7. Call completeAuthFlow() from useAuthFlow hook
+
+**completeAuthFlow() Steps** (useAuthFlow.ts):
+1. authorizeSession(): Generate ephemeral wallet → Sign auth message with passkey (Face ID) → POST /api/authorize → store privateKey in localStorage.sessionKey
+2. login(): Get challenge from /api/login/challenge → Sign with ephemeral key → POST /api/login → receive JWT → store in localStorage.authToken
+
+**Login Flow** (useAuthFlow.ts loginFlow()):
+1. Check for localStorage.passkeyInfo
+2. If not found: recoverPasskeyInfo() - use discoverable credentials to find passkey
+3. completeAuthFlow() - authorize and login
+
+**useVoting Hook** (casting votes):
+- Checks localStorage.passkeyInfo and localStorage.sessionKey
+- Gets nonce from contract via /api/nonce
+- Signs vote message with ephemeral private key from localStorage
+- Sends to /api/vote with pubKeyX, pubKeyY, signer, signature
+
+**AuthContext** (global auth state):
+- checkExistingSession() on mount: validates stored authToken with /api/auth/me
+- Sets isLoggedIn when JWT exists AND signer not expired
+- Tracks needsSignerRefresh if < 24 hours remaining (7-day signer TTL)
+**Files**: src/app/register/page.tsx, src/hooks/useAuthFlow.ts, src/hooks/useVoting.ts, src/contexts/AuthContext.tsx
+---
+
+### [18:52] [gotcha] Supabase Auth Dual-Use Pattern and Cleanup
+**Details**: **Important Gotcha**: The project uses Supabase Auth (magic links) ONLY for initial email verification, then switches to passkey auth.
+
+**Flow**:
+1. Register page calls supabase.auth.signInWithOtp() - sets Supabase session cookie
+2. Magic link callback (/auth/callback) exchanges code for session
+3. User creates passkey and completes auth flow
+4. **Key step** in /src/app/register/page.tsx: After success, it calls supabase.auth.signOut() to clear the Supabase session
+
+**Why**: The project deliberately uses passkey auth instead of Supabase JWT. The Supabase cookie is only needed to:
+- Authenticate POST /api/register so users can't register other users' passkeys
+- Verify email ownership via OTP
+
+**Code snippet from register page**:
+```typescript
+// After auth flow completes, sign out of Supabase and refresh session
+React.useEffect(() => {
+  if (status === 'success') {
+    // Clean up Supabase session since we now use passkey auth
+    supabase.auth.signOut().then(() => {
+      refreshSession()
+    })
+  }
+}, [status, refreshSession, supabase.auth])
+```
+
+**Result**: No Supabase JWT tokens are ever used in the app. Only localStorage.authToken (our custom JWT) is used.
+**Files**: src/app/register/page.tsx, src/lib/db/users.ts
+---
+
+### [18:52] [voting] Complete Voting System Architecture and Implementation
+**Details**: ## Core Voting System Overview
+
+The voting system has TWO distinct voting implementations:
+
+### 1. ON-CHAIN VOTING (useVoting.ts + useOnChainVotes.ts)
+- Primary implementation using smart contract storage
+- Uses Web3 passkey authentication (P-256 public keys)
+- Ephemeral signers authorized by passkey
+- Topic ID = keccak256(sessionUUID) - computed on the fly
+
+**Key Flow:**
+1. User casts vote via castVote() or batchVote() 
+2. Frontend signs message with ephemeral wallet (k1/secp256k1)
+3. API route /api/vote validates passkey (Gate 1) + checks signer expiry (Gate 2)
+4. Relayer calls contract.vote() or contract.batchVote()
+5. React Query caches result with optimistic updates
+
+**Vote Value Semantics:**
+- 0 = remove vote
+- 1 = favorite (binary marker in pre-voting context)
+- 1-100 = percentage allocation (for my-votes ranking)
+
+### 2. OFF-CHAIN VOTING (use-votes.ts)
+- Legacy/fallback implementation using off-chain API
+- Separate from on-chain system
+- Used for backward compatibility
+
+## React Query Caching Architecture (useOnChainVotes.ts)
+
+**useOnChainVotes Hook:**
+- Fetches votes from contract.getVotes() via RPC
+- Query key: `['votes', 'user', pubKeyX, pubKeyY, 'sessions', sessionIds.sort().join(',')]`
+- staleTime: 60 seconds, gcTime: 5 minutes
+- Maps topicIds ↔ sessionUUIDs transparently
+- Returns votes object keyed by session UUID, not topicId
+
+**useVoteMutation Hook:**
+- Single vote: calls castVote({ sessionId, value })
+- Batch votes: calls castBatchVotes([{ sessionId, value }...])
+- Optimistic updates via onMutate before async call
+- Rolls back on error
+- Trusts optimistic update (no invalidation on success)
+- Auto-increments nonce on-chain
+
+**Query Key Factory:**
+```typescript
+voteKeys.all: ['votes']
+voteKeys.user(pubKeyX, pubKeyY): ['votes', 'user', pubKeyX, pubKeyY]
+voteKeys.sessions(pubKeyX, pubKeyY, sessionIds): [..., 'sessions', '...']
+```
+
+## API Routes for Voting
+
+**POST /api/vote** - Single vote
+- Input: { pubKeyX, pubKeyY, signer, topicId, value, signature }
+- Gate 1: getUserByPasskey() validates user registered in Supabase
+- Gate 2: contract.signers(identityHash, signer) validates expiry
+- Calls: contract.vote([pubKeyX, pubKeyY], signer, topicId, value, signature)
+- Returns: { success: true, txHash }
+
+**POST /api/vote/batch** - Batch votes
+- Input: { pubKeyX, pubKeyY, signer, topicIds[], values[], signature }
+- Same gates as single vote
+- Calls: contract.batchVote([pubKeyX, pubKeyY], signer, topicIds, values, signature)
+- Returns: { success: true, txHash, votesCount }
+
+**GET /api/nonce** - Get replay protection nonce
+- Query: ?pubKeyX=...&pubKeyY=...
+- Calls: contract.getNonce([pubKeyX, pubKeyY])
+- Returns: { nonce: number }
+
+## UI Components for Voting
+
+### TapToVote (tap-to-vote.tsx)
+- 140x140px circular button for attendance voting
+- Shows ripple feedback animation on vote
+- Calculates nextCost using calculateNextVoteCost()
+- Disabled if remaining credits insufficient
+- Props: votes, onVote, remainingCredits, disabled
+
+### VoteCounter (vote-counter.tsx)
+- +/- buttons for incrementing/decrementing votes
+- Shows VoteDots visualization
+- Displays current cost and next vote cost
+- Used in session cards for pre-voting
+- Props: votes, onVote(newVotes), remainingCredits
+
+### VoteDots (vote-dots.tsx)
+- Animated dot visualization of vote count
+- maxDisplay: 10 dots (shows "+N" if exceeded)
+- Sizes: sm, default, lg
+- Filled dots = votes, empty dots = remaining display space
+
+### CreditBar (credit-bar.tsx)
+- Progress bar showing remaining credits
+- Color changes: green → amber → red based on threshold (50%, 20%)
+- Shows "Voting Credits Remaining: X/Y"
+- Sizes: sm, default, lg
+
+## Session Voting Integration
+
+### Session Card (session-card.tsx)
+- Displays VoteCounter for immediate pre-voting
+- Props: session, remainingCredits, onVote(), onToggleFavorite()
+- VoteCounter calls onVote(sessionId, votes) with new vote count
+
+### Sessions Page (/app/event/sessions/page.tsx)
+- Lists all approved sessions with voting enabled
+- Uses useOnChainVotes with React Query caching
+- Favorites tracked by: vote value === 1 (on-chain) or localStorage fallback
+- handleVote() calls castVote() from use-votes.ts hook
+- handleToggleFavorite() calls castOnChainVote({ sessionId, value: 1 or 0 })
+
+## My-Votes Page (/app/event/my-votes/page.tsx)
+
+**Complex Drag-and-Drop Ranking System:**
+- Loads favorited sessions (where onChainVotes[sessionId] > 0)
+- Drag to reorder ranked list
+- Visual drop indicator shows insertion point
+- Four curve types for distribution:
+  - even: All equal (1/n each)
+  - sqrt: Square root weighting (balanced)
+  - linear: Linear decay (n, n-1, ..., 1)
+  - exponential: Top-heavy (n², (n-1)², ...)
+- Weights normalized to sum to exactly 100
+
+**Batch Vote Process:**
+1. User ranks favorites and selects curve
+2. calculateWeights() computes percentages
+3. "Save Allocation" button calls castBatchVotes()
+4. Submits array of { sessionId, value: percentage } to on-chain vote
+
+**Graph/Shape Visualization:**
+- Distribution preview bar: stacked bar chart with color gradient
+- Shows visual proportion of each session's allocation
+
+## Live Voting Page (/app/event/live/page.tsx)
+
+**Real-time Session Voting:**
+- Shows currently live session (based on time slot)
+- TapToVote interface for attendance voting
+- Each tap increments votes by 1
+- Status message while submitting: "Submitting vote on-chain..."
+- Shows last tx hash with link to Basescan
+- Displays today's votes in session list
+
+**Voting Flow:**
+1. User taps TapToVote button
+2. Sets localVotes = newVotes
+3. Calls castOnChainVote(topicId, 1) via useVoting hook
+4. Updates off-chain stats via castOffChainVote() fallback
+5. Shows error if either fails, reverts localVotes
+
+## Quadratic Cost Calculation (utils.ts)
+
+```typescript
+calculateQuadraticCost(votes): votes²
+calculateNextVoteCost(currentVotes): 2*currentVotes + 1
+calculateMaxVotes(credits): floor(sqrt(credits))
+```
+
+Cost examples:
+- 1 vote = 1 credit (costs 1)
+- 2 votes = 4 credits (costs +3)
+- 3 votes = 9 credits (costs +5)
+- 10 votes = 100 credits
+
+## Pre-Vote vs Attendance Vote Distinction
+
+**Pre-Event Voting (sessions page + my-votes):**
+- 100 credits (configurable in event)
+- Value semantics: 1 = favorite (selection), 1-100 = percentage (allocation)
+- Influences scheduling algorithm
+- UI: VoteCounter (increment/decrement) + drag ranking
+
+**Attendance Voting (live page):**
+- 100 fresh credits (separate from pre-votes)
+- Value semantics: count of taps/votes
+- Determines session budget via quadratic funding
+- UI: TapToVote (circular button with ripple feedback)
+
+## localStorage State Management
+
+**passkeyInfo:**
+```json
+{ credentialId, userId, pubKeyX, pubKeyY }
+```
+
+**sessionKey:**
+```json
+{ privateKey, address, expiry }
+```
+
+No JWT tokens, no HTTP auth headers - entirely localStorage-based.
+
+## Message Signing Details
+
+**Single vote message:**
+```
+keccak256(abi.encodePacked('vote', identityHash, topicId, value, nonce, CHAIN_ID, CONTRACT_ADDRESS))
+```
+
+**Batch vote message:**
+```
+keccak256(abi.encodePacked(
+  'batchVote',
+  identityHash,
+  keccak256(abi.encodePacked(topicIds[])),
+  keccak256(abi.encodePacked(values[])),
+  nonce,
+  CHAIN_ID,
+  CONTRACT_ADDRESS
+))
+```
+
+Signature format: r (32) || s (32) || v (1) = 65 bytes total
+**Files**: src/hooks/useVoting.ts, src/hooks/useOnChainVotes.ts, src/hooks/use-votes.ts, src/components/voting/tap-to-vote.tsx, src/components/voting/vote-counter.tsx, src/components/voting/vote-dots.tsx, src/components/voting/credit-bar.tsx, src/app/event/my-votes/page.tsx, src/app/event/sessions/page.tsx, src/app/event/live/page.tsx, src/app/api/vote/route.ts, src/app/api/vote/batch/route.ts, src/app/api/nonce/route.ts, src/lib/utils.ts, src/lib/contracts/SchellingPointVotes.ts
+---
+
+### [18:54] [architecture] Complete Login and Registration Flow Architecture
+**Details**: 
+REGISTRATION FLOW (/src/app/register/page.tsx):
+
+User Journey:
+1. Landing page shows "Enter Event" button that triggers AuthModal
+2. AuthModal shows two options:
+   - "Sign in with Passkey" (for returning users)
+   - "Register with Email" (for new users)
+   
+3. Register button navigates to /register page (RegisterContent component)
+   Mode states: 'loading' | 'email' | 'email-sent' | 'passkey'
+   
+   Step 1 - EMAIL VERIFICATION:
+   - User enters email
+   - Supabase OTP magic link sent to email (via supabase.auth.signInWithOtp)
+   - Email redirect URL: /auth/callback
+   - User sees "Check Your Email" confirmation screen
+   
+   Step 2 - MAGIC LINK CALLBACK:
+   - User clicks magic link in email
+   - Routes to /auth/callback (route.ts)
+   - Exchanges code for Supabase session (supabase.auth.exchangeCodeForSession)
+   - Redirects back to /register page
+   - Page detects Supabase session with getUser(), sets mode to 'passkey'
+   
+   Step 3 - PASSKEY CREATION:
+   - User taps "Create Account with Face ID / Touch ID"
+   - navigator.credentials.create() with P-256 (alg: -7)
+   - Public key coordinates (X, Y) extracted from CBOR attestationObject via extractPublicKey()
+   - Credential ID stored (arrayBufferToBase64Url)
+   - Backend /api/register called with { pubKeyX, pubKeyY, credentialId }
+   - Passkey info stored in localStorage
+   
+   Step 4 - AUTH FLOW COMPLETION:
+   - useAuthFlow.completeAuthFlow() is called
+   - Calls authorizeSession() - creates ephemeral wallet, requests Face ID auth with WebAuthn
+   - Calls login() - gets JWT via /api/login endpoint
+   - localStorage stores: passkeyInfo + sessionKey + authToken
+   - AuthContext.refreshSession() is called
+   - Redirects to /event/sessions
+
+LOGIN FLOW (/src/app/login/page.tsx):
+
+User Journey:
+1. Triggered by AuthModal "Sign in with Passkey" button
+2. Navigates to /login page (LoginPage component)
+
+Step 1 - PASSKEY RECOVERY (if needed):
+- Checks localStorage for passkeyInfo
+- If not found, calls useAuthFlow.recoverPasskeyInfo()
+- Uses navigator.credentials.get() with discoverable credentials (no allowCredentials)
+- User selects passkey from device
+- Backend /api/auth/lookup called to get user data (pubKeyX, pubKeyY)
+- Passkey info stored in localStorage
+
+Step 2 - SESSION AUTHORIZATION:
+- Calls useAuthFlow.authorizeSession()
+- Generates new ephemeral wallet
+- Creates authorization message: keccak256(abi.encode(signer, expiry, chainId, contract))
+- Requests WebAuthn signature (Face ID/Touch ID) with challenge
+- Parses DER signature to extract r, s values
+- Backend /api/authorize called with signature data
+- sessionKey stored in localStorage
+
+Step 3 - LOGIN TO GET JWT:
+- Calls useAuthFlow.login()
+- Gets challenge from /api/login/challenge
+- Signs challenge with ephemeral signer (ECDSA)
+- Sends to /api/login endpoint
+- JWT stored in authToken localStorage
+- AuthContext.refreshSession() confirms login state
+- Redirects to /event
+
+ADDITIONAL REGISTRATION STEPS:
+
+After passkey auth completes, two optional flows exist (though currently not triggered):
+
+Profile Setup (ProfileSetup component):
+- 3-step modal form (not connected to current flow)
+- Step 1: Display name (required), bio, interests, avatar
+- Step 2: Email, location, socials (optional)
+- Step 3: BurnerSetup (optional - link physical burner card)
+
+Onboarding Tutorial (OnboardingTutorial component):
+- 4-slide carousel explaining quadratic voting
+- "Enter Event" button on final slide
+
+AUTH MODAL (auth-modal.tsx):
+- Simple modal with two options:
+  - "Sign in with Passkey" → navigates to /login
+  - "Register with Email" → navigates to /register
+- Called from landing page when "Enter Event" clicked
+- Can also show links to navigate between login/register flows
+
+AUTHENTICATION STATE MANAGEMENT:
+
+AuthContext (contexts/AuthContext.tsx):
+- useAuth() hook provides auth state
+- State: { user, token, signerAddress, signerExpiry, isLoading, isLoggedIn, needsSignerRefresh }
+- isLoggedIn = !!user && !!token && (signerExpiry > now)
+- localStorage keys:
+  - authToken: JWT from backend
+  - passkeyInfo: { credentialId, userId, pubKeyX, pubKeyY }
+  - sessionKey: { privateKey, address, expiry }
+
+useAuthFlow hook:
+- Status states: 'idle' | 'recovering' | 'authorizing' | 'logging-in' | 'success' | 'error'
+- Methods:
+  - recoverPasskeyInfo(): discovers passkey via navigator.credentials.get()
+  - authorizeSession(passkeyInfo): creates ephemeral signer on-chain
+  - login(passkeyInfo, sessionKey): exchanges for JWT
+  - completeAuthFlow(passkeyInfo): combines authorize + login
+  - loginFlow(): full login with optional recovery
+
+PROTECTED ROUTES:
+
+Event Layout (/src/app/event/layout.tsx):
+- Checks useAuth() isLoggedIn state
+- If !isLoggedIn, redirects to /login
+- Shows loading spinner while checking auth
+- Navbar displays user menu with Profile/Settings/Admin/Sign out
+- onSignOut prop calls logout() from AuthContext
+
+UNAUTHENTICATED FLOWS:
+
+Landing Page (src/app/page.tsx):
+- Accessible to all users
+- "Enter Event" button opens AuthModal (sets authStep to 'auth')
+- "View Sessions" button navigates to /event/sessions (unprotected? needs verification)
+- AuthModal, ProfileSetup, OnboardingTutorial are local state controlled
+- No global auth state requirement
+
+KEY DESIGN NOTES:
+- NO JWT middleware or session cookies (entirely localStorage-based)
+- Three-gate security: Supabase email verification → WebAuthn passkey → Ephemeral signer
+- Passkey discovery supports users with multiple passkies (browser selects which one)
+- Ephemeral signer valid 7 days, can be refreshed if < 24 hours remaining
+- Error states show destructive/10 background with error messages
+- Loading states use Loader2 spinner icon with "Loading..." text
+- Step indicators show progress (1→2 or 2→1) during auth flow
+
+**Files**: /workspace/project/src/app/register/page.tsx, /workspace/project/src/app/login/page.tsx, /workspace/project/src/contexts/AuthContext.tsx, /workspace/project/src/hooks/useAuthFlow.ts, /workspace/project/src/components/auth/auth-modal.tsx, /workspace/project/src/app/auth/callback/route.ts, /workspace/project/src/app/page.tsx, /workspace/project/src/app/event/layout.tsx
+---
+
+### [19:09] [gotcha] Favorites vs Voting Overlap and Confusion
+**Details**: The codebase has both a "favorites" system and a voting system that have significant overlap and create user confusion:
+
+**FAVORITES SYSTEM (Client-side localStorage):**
+- Persists to localStorage via useFavorites hook: `schelling-point-favorites`
+- Used in /event/my-schedule to show "My Schedule" (saved/hearted sessions)
+- Heart icon toggle on session cards adds/removes from localStorage
+- NOT stored in database or on-chain
+- Separate from voting completely
+
+**VOTING SYSTEM (On-chain):**
+- Stores vote counts on-chain (SchellingPointVotes contract)
+- Each vote is a session UUID → topic ID hash → vote amount
+- My Votes (/event/my-votes) shows "favorites" but actually means "sessions with vote count > 0"
+- Creates confusion: a "favorited" session for voting purposes is just one with any vote count
+
+**THE CONFLICT:**
+1. Toggling heart on session card in /event/sessions currently toggles on-chain vote (0 or 1) for logged-in users
+2. /event/my-schedule uses localStorage favorites, NOT on-chain votes
+3. /event/my-votes incorrectly uses the term "favorites" but actually filters sessions where onChainVotes[sessionId] > 0
+4. Two separate favorite/bookmarking mechanisms exist with no synchronization
+
+**WHAT VOTING.ADD BROKE:**
+When voting was added, the heart toggle (onToggleFavorite) was changed from toggling localStorage to casting on-chain votes. But /event/my-schedule still uses localStorage useFavorites(), creating a disconnect where:
+- Toggling heart on session card in /event/sessions adds on-chain vote
+- But /event/my-schedule doesn't show it unless you manually mark it as localStorage favorite
+- Users who vote on sessions don't see them in "My Schedule" unless they explicitly favorite
+
+**FILES INVOLVED:**
+- /src/app/event/sessions/page.tsx: handleToggleFavorite casts on-chain vote
+- /src/app/event/my-schedule/page.tsx: Uses localStorage useFavorites(), filters by localStorage not votes
+- /src/app/event/my-votes/page.tsx: Misuses "favorites" terminology, actually filters by vote count > 0
+- /src/hooks/use-favorites.ts: Simple localStorage wrapper
+- /src/hooks/useOnChainVotes.ts: Fetches votes from contract
+**Files**: /src/app/event/sessions/page.tsx, /src/app/event/my-schedule/page.tsx, /src/app/event/my-votes/page.tsx, /src/hooks/use-favorites.ts, /src/hooks/useOnChainVotes.ts, /src/components/sessions/session-card.tsx
+---
+
+### [22:50] [auth] Login flow re-authorization bug and fix
+**Details**: loginFlow() in useAuthFlow.ts was creating a new ephemeral wallet and calling authorizeSession() on every login, even when a valid sessionKey existed in localStorage. Fixed completeAuthFlow() to check for existing valid sessionKey before re-authorizing. Three login paths now: (1) has passkeyInfo + valid sessionKey → skip straight to challenge/login (no Face ID), (2) has passkeyInfo but no sessionKey → authorize new signer (one Face ID) → login, (3) no passkeyInfo → discoverable credentials recovery → authorize → login.
+**Files**: src/hooks/useAuthFlow.ts, src/app/login/page.tsx, src/contexts/AuthContext.tsx
+---
+
+### [22:50] [auth] Logout clears sessionKey, keeps passkeyInfo
+**Details**: Logout now clears authToken AND sessionKey from localStorage, but keeps passkeyInfo. This means after logout, user sees 1-step login flow (Face ID to create new ephemeral signer). Before this fix, logout kept sessionKey which was a private key leak on shared devices. Settings page logout was also broken (just console.log) - now fixed to use actual logout() from AuthContext.
+**Files**: src/contexts/AuthContext.tsx, src/app/settings/page.tsx
 ---
 
