@@ -115,18 +115,20 @@ test.describe('Admin Venues - Time Slots', () => {
     await navigateAuthenticated(page, '/admin/venues', 'alice')
   })
 
-  test('displays Day selector buttons', async ({ page }) => {
-    await expect(page.locator('button:has-text("Day 1")')).toBeVisible()
-    await expect(page.locator('button:has-text("Day 2")')).toBeVisible()
+  test('displays Time Slots section', async ({ page }) => {
+    // Time Slots section should be visible (use exact match to avoid matching "Venues & Time Slots")
+    await expect(page.getByRole('heading', { name: 'Time Slots', exact: true })).toBeVisible()
   })
 
-  test('switching days shows different time slots', async ({ page }) => {
-    // Click Day 2
-    await page.locator('button:has-text("Day 2")').click()
+  test('time slots list shows slot times', async ({ page }) => {
+    // Wait for data to load
+    await page.waitForTimeout(1000)
 
-    // Content should update (verify page doesn't crash)
-    await page.waitForTimeout(500)
-    expect(await page.content()).toBeTruthy()
+    // Should show time format (HH:MM - HH:MM) or empty state message
+    const hasSlots = await page.locator('text=/\\d{2}:\\d{2}.*-.*\\d{2}:\\d{2}/').count() > 0
+    const hasEmptyState = await page.locator('text=/No time slots configured/i').isVisible()
+
+    expect(hasSlots || hasEmptyState).toBe(true)
   })
 
   test('Add Slot opens modal', async ({ page }) => {
