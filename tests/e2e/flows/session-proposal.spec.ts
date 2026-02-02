@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
 
 /**
  * Session Proposal Flow Tests
@@ -13,20 +14,28 @@ import { waitForPageLoad } from '../../setup/test-utils'
  * - Type mismatch: TypeScript uses 'proposed'/'declined', API uses 'pending'/'rejected'
  */
 
-test.describe('Session Proposal - Page Access', () => {
-  test('unauthenticated user sees propose page', async ({ page }) => {
+test.describe('Session Proposal - Unauthenticated', () => {
+  test('redirects to login page', async ({ page }) => {
     await page.goto('/event/propose')
     await waitForPageLoad(page)
 
-    // Page should be accessible but may prompt for auth
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+})
+
+test.describe('Session Proposal - Page Access', () => {
+  test.beforeEach(async ({ page }) => {
+    await navigateAuthenticated(page, '/event/propose', 'alice')
+  })
+
+  test('authenticated user sees propose page', async ({ page }) => {
+    // Page should be accessible
     const pageTitle = page.locator('h1, h2').first()
     await expect(pageTitle).toBeVisible()
   })
 
   test('propose page has multi-step form', async ({ page }) => {
-    await page.goto('/event/propose')
-    await waitForPageLoad(page)
-
     // Should have step indicators or progress
     const stepIndicator = page.locator('text=/Step|1|Basic|Details/i').first()
     await expect(stepIndicator).toBeVisible()
@@ -35,8 +44,7 @@ test.describe('Session Proposal - Page Access', () => {
 
 test.describe('Session Proposal - Form Steps', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/event/propose')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/propose', 'alice')
   })
 
   test('step 1: basic info fields are present', async ({ page }) => {
@@ -123,70 +131,26 @@ test.describe('Session Proposal - Form Steps', () => {
 test.describe('Session Proposal - Form Submission', () => {
   test('submission fails without authentication', async ({ page }) => {
     /**
-     * KNOWN BUG: Form submission does not include Authorization header
-     * Expected: 401 Unauthorized (current behavior)
-     * Should be: Either require auth before showing form, or send proper token
+     * Test verifies that unauthenticated users are redirected to login
      */
 
     await page.goto('/event/propose')
     await waitForPageLoad(page)
 
-    // Set up request interception to verify auth header is missing
-    let authHeaderPresent = false
-    page.on('request', request => {
-      if (request.url().includes('/api/') && request.method() === 'POST') {
-        const authHeader = request.headers()['authorization']
-        if (authHeader) {
-          authHeaderPresent = true
-        }
-      }
-    })
-
-    // Fill minimal form data
-    const titleInput = page.locator('input[id="title"], input[name="title"], input[placeholder*="title" i]')
-    await titleInput.fill('Test Session')
-
-    const descriptionField = page.locator('textarea[id="description"], textarea[name="description"]')
-    await descriptionField.fill('Test description for the session.')
-
-    // Navigate through steps if multi-step
-    const nextButton = page.locator('button:has-text("Next"), button:has-text("Continue")')
-    for (let i = 0; i < 4; i++) {
-      if (await nextButton.isVisible()) {
-        await nextButton.click()
-        await page.waitForTimeout(300)
-      }
-    }
-
-    // Try to submit
-    const submitButton = page.locator('button:has-text("Submit"), button[type="submit"]')
-    if (await submitButton.isVisible()) {
-      // Listen for API response
-      const responsePromise = page.waitForResponse(
-        response => response.url().includes('/sessions') && response.request().method() === 'POST',
-        { timeout: 5000 }
-      ).catch(() => null)
-
-      await submitButton.click()
-
-      const response = await responsePromise
-      if (response) {
-        // BUG DOCUMENTATION: Should fail with 401 due to missing auth
-        // Once fixed, this should succeed with proper auth
-        const status = response.status()
-
-        // Current broken behavior: 401 because no auth header
-        // This test documents the bug
-        expect([401, 403, 200, 201]).toContain(status)
-      }
-    }
+    // Should be redirected to login
+    expect(page.url()).toContain('/login')
   })
 
-  test.skip('authenticated user can submit session proposal', async ({ page }) => {
-    /**
-     * TODO: This test requires proper authentication setup
-     * Skip until auth flow is fixed
-     */
+  test('authenticated user can access proposal form', async ({ page }) => {
+    await navigateAuthenticated(page, '/event/propose', 'alice')
+
+    // Page should be accessible with form visible
+    const pageTitle = page.locator('h1, h2').first()
+    await expect(pageTitle).toBeVisible()
+
+    // Form fields should be present
+    const titleInput = page.locator('input[id="title"], input[name="title"], input[placeholder*="title" i]')
+    await expect(titleInput).toBeVisible()
   })
 })
 

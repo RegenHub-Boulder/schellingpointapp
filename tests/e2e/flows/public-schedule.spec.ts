@@ -1,10 +1,25 @@
 import { test, expect } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
 
-test.describe('Public Schedule Page', () => {
-  test.beforeEach(async ({ page }) => {
+/**
+ * Schedule Page Tests
+ *
+ * Note: /event/* routes are protected and require authentication.
+ */
+
+test.describe('Schedule Page - Unauthenticated', () => {
+  test('redirects unauthenticated users to login', async ({ page }) => {
     await page.goto('/event/schedule')
-    await waitForPageLoad(page)
+
+    // Should redirect to login
+    await expect(page).toHaveURL(/\/login/)
+  })
+})
+
+test.describe('Schedule Page (Authenticated)', () => {
+  test.beforeEach(async ({ page }) => {
+    await navigateAuthenticated(page, '/event/schedule', 'alice')
   })
 
   test('schedule page loads', async ({ page }) => {
@@ -13,40 +28,29 @@ test.describe('Public Schedule Page', () => {
   })
 
   test('displays schedule or not-available message', async ({ page }) => {
-    // Wait for content to load
     await page.waitForTimeout(2000)
 
-    // Either shows schedule content or a message
     const content = await page.content()
     expect(content.length).toBeGreaterThan(0)
   })
 
   test('has navigation tabs', async ({ page }) => {
-    // Should have navigation in event layout
     const scheduleTab = page.locator('a:has-text("Schedule")')
     await expect(scheduleTab.first()).toBeVisible()
   })
 })
 
-test.describe('My Schedule Page (requires auth)', () => {
-  test('shows content or redirects when not authenticated', async ({ page }) => {
+test.describe('My Schedule Page - Unauthenticated', () => {
+  test('redirects unauthenticated users to login', async ({ page }) => {
     await page.goto('/event/my-schedule')
-    await waitForPageLoad(page)
 
-    // Should either:
-    // 1. Show the page (if accessible without auth)
-    // 2. Show login prompt
-    // 3. Redirect to login
-
-    const pageContent = await page.content()
-    expect(pageContent).toBeTruthy()
+    await expect(page).toHaveURL(/\/login/)
   })
 })
 
-test.describe('Schedule - Navigation', () => {
+test.describe('Schedule - Navigation (Authenticated)', () => {
   test('can navigate between schedule and sessions', async ({ page }) => {
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     // Navigate to schedule
     const scheduleLink = page.locator('a:has-text("Schedule")')

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
 
 /**
  * Favorites Flow Tests
@@ -13,15 +14,32 @@ import { waitForPageLoad } from '../../setup/test-utils'
  * - On-chain favorites conflated with voting (value=1 means favorite)
  */
 
-test.describe('Favorites - localStorage (Non-Authenticated)', () => {
-  test.beforeEach(async ({ page }) => {
-    // Clear localStorage to start fresh
+test.describe('Favorites - Unauthenticated', () => {
+  test('sessions page redirects to login', async ({ page }) => {
     await page.goto('/event/sessions')
-    await page.evaluate(() => localStorage.removeItem('schelling-point-favorites'))
     await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
   })
 
-  test('can favorite a session without authentication', async ({ page }) => {
+  test('my-schedule page redirects to login', async ({ page }) => {
+    await page.goto('/event/my-schedule')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+})
+
+test.describe('Favorites - localStorage (Authenticated)', () => {
+  test.beforeEach(async ({ page }) => {
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
+    // Clear favorites localStorage to start fresh
+    await page.evaluate(() => localStorage.removeItem('schelling-point-favorites'))
+  })
+
+  test('can favorite a session', async ({ page }) => {
     const sessionCard = page.locator('[data-testid="session-card"]').first()
 
     await sessionCard.waitFor({ timeout: 10000 }).catch(() => {})
@@ -53,7 +71,7 @@ test.describe('Favorites - localStorage (Non-Authenticated)', () => {
       await heartButton.click()
       await page.waitForTimeout(500)
 
-      // Reload page
+      // Reload page (auth state persists in localStorage)
       await page.reload()
       await waitForPageLoad(page)
 
@@ -97,17 +115,17 @@ test.describe('Favorites - localStorage (Non-Authenticated)', () => {
 })
 
 test.describe('Favorites - My Schedule Page', () => {
-  test('my-schedule page loads', async ({ page }) => {
-    await page.goto('/event/my-schedule')
-    await waitForPageLoad(page)
+  test.beforeEach(async ({ page }) => {
+    await navigateAuthenticated(page, '/event/my-schedule', 'alice')
+  })
 
+  test('my-schedule page loads', async ({ page }) => {
     const pageTitle = page.locator('h1, h2').first()
     await expect(pageTitle).toBeVisible()
   })
 
   test('shows empty state when no favorites', async ({ page }) => {
     // Clear favorites first
-    await page.goto('/event/my-schedule')
     await page.evaluate(() => localStorage.removeItem('schelling-point-favorites'))
     await page.reload()
     await waitForPageLoad(page)
@@ -124,8 +142,7 @@ test.describe('Favorites - My Schedule Page', () => {
 
   test('displays favorited sessions', async ({ page }) => {
     // First add a favorite on sessions page
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     const sessionCard = page.locator('[data-testid="session-card"]').first()
     await sessionCard.waitFor({ timeout: 10000 }).catch(() => {})
@@ -135,7 +152,7 @@ test.describe('Favorites - My Schedule Page', () => {
       await heartButton.click()
       await page.waitForTimeout(500)
 
-      // Navigate to my-schedule
+      // Navigate to my-schedule (auth persists)
       await page.goto('/event/my-schedule')
       await waitForPageLoad(page)
 
@@ -153,9 +170,6 @@ test.describe('Favorites - My Schedule Page', () => {
      * Button exists but is disabled
      */
 
-    await page.goto('/event/my-schedule')
-    await waitForPageLoad(page)
-
     const exportButton = page.locator('button:has-text("Export")')
 
     if (await exportButton.isVisible()) {
@@ -170,9 +184,6 @@ test.describe('Favorites - My Schedule Page', () => {
      * KNOWN ISSUE: Share Schedule feature is not implemented
      */
 
-    await page.goto('/event/my-schedule')
-    await waitForPageLoad(page)
-
     const shareButton = page.locator('button:has-text("Share")')
 
     if (await shareButton.isVisible()) {
@@ -183,10 +194,11 @@ test.describe('Favorites - My Schedule Page', () => {
 })
 
 test.describe('Favorites - Sessions Page Integration', () => {
-  test('My Schedule button shows favorite count', async ({ page }) => {
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+  test.beforeEach(async ({ page }) => {
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
+  })
 
+  test('My Schedule button shows favorite count', async ({ page }) => {
     // My Schedule link/button should show count
     const myScheduleLink = page.locator('text=/My Schedule/i')
 
@@ -198,9 +210,6 @@ test.describe('Favorites - Sessions Page Integration', () => {
   })
 
   test('favorite count updates when toggling', async ({ page }) => {
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
-
     // Get initial count
     const myScheduleLink = page.locator('text=/My Schedule.*\\(\\d+\\)/i')
     const initialVisible = await myScheduleLink.isVisible()

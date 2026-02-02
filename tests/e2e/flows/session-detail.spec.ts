@@ -1,11 +1,29 @@
 import { test, expect } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
+
+test.describe('Session Detail - Unauthenticated', () => {
+  test('sessions page redirects to login', async ({ page }) => {
+    await page.goto('/event/sessions')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+
+  test('direct session detail URL redirects to login', async ({ page }) => {
+    await page.goto('/event/sessions/some-session-id')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+})
 
 test.describe('Session Detail Page', () => {
   test.beforeEach(async ({ page }) => {
-    // First, get a session ID from the sessions list
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    // Navigate to sessions page with authentication
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     // Wait for session cards to load
     const sessionCard = page.locator('[data-testid="session-card"]').first()
@@ -77,8 +95,7 @@ test.describe('Session Detail Page', () => {
 
 test.describe('Session Detail - Voting', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     const sessionCard = page.locator('[data-testid="session-card"]').first()
     await sessionCard.waitFor({ timeout: 10000 }).catch(() => {})
@@ -119,8 +136,7 @@ test.describe('Session Detail - Voting', () => {
 
 test.describe('Session Detail - Loading States', () => {
   test('handles invalid session ID gracefully', async ({ page }) => {
-    await page.goto('/event/sessions/invalid-session-id-12345')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions/invalid-session-id-12345', 'alice')
 
     // Wait for either error message or back button
     await page.waitForTimeout(3000)
@@ -136,9 +152,8 @@ test.describe('Session Detail - Loading States', () => {
   })
 
   test('shows loading spinner while fetching', async ({ page }) => {
-    // Navigate to sessions page first
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    // Navigate to sessions page first with auth
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     const sessionCard = page.locator('[data-testid="session-card"]').first()
     await sessionCard.waitFor({ timeout: 10000 }).catch(() => {})

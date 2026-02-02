@@ -1,10 +1,20 @@
 import { test, expect } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
+
+test.describe('Admin Schedule - Unauthenticated', () => {
+  test('redirects to login page', async ({ page }) => {
+    await page.goto('/admin/schedule')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+})
 
 test.describe('Admin Schedule Page', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/schedule')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/schedule', 'alice')
   })
 
   test('page loads with schedule builder UI', async ({ page }) => {
@@ -34,8 +44,7 @@ test.describe('Admin Schedule Page', () => {
 
 test.describe('Admin Schedule - Pre-flight Checklist', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/schedule')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/schedule', 'alice')
   })
 
   test('shows session count in checklist', async ({ page }) => {
@@ -77,8 +86,7 @@ test.describe('Admin Schedule - Pre-flight Checklist', () => {
 
 test.describe('Admin Schedule - Generate Button', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/schedule')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/schedule', 'alice')
   })
 
   test('has Auto-Generate Schedule button when not generated', async ({ page }) => {
@@ -106,8 +114,7 @@ test.describe('Admin Schedule - Generate Button', () => {
 
 test.describe('Admin Schedule - Schedule Grid', () => {
   test('grid shows venue headers when generated', async ({ page }) => {
-    await page.goto('/admin/schedule')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/schedule', 'alice')
     await page.waitForTimeout(2000)
 
     // If schedule is generated, should show venue columns in grid
@@ -120,8 +127,7 @@ test.describe('Admin Schedule - Schedule Grid', () => {
   })
 
   test('grid shows time slots when generated', async ({ page }) => {
-    await page.goto('/admin/schedule')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/schedule', 'alice')
     await page.waitForTimeout(2000)
 
     // Time slots might be shown as rows in the grid
@@ -136,8 +142,7 @@ test.describe('Admin Schedule - Schedule Grid', () => {
 
 test.describe('Admin Schedule - Publish', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/schedule')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/schedule', 'alice')
   })
 
   test('publish button appears after generation', async ({ page }) => {
