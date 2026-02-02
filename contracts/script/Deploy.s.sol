@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import "forge-std/Script.sol";
-import "../src/SchellingPointVotes.sol";
+import "../src/SchellingPointQV.sol";
 
 contract DeployScript is Script {
     function run() external {
@@ -13,12 +13,19 @@ contract DeployScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy the contract
-        SchellingPointVotes votes = new SchellingPointVotes();
+        SchellingPointQV qv = new SchellingPointQV();
 
-        console.log("SchellingPointVotes deployed to:", address(votes));
-        console.log("Chain ID:", block.chainid);
-        console.log("Deployer:", vm.addr(deployerPrivateKey));
+        // Create event with ID derived from "schelling-point-2025"
+        uint256 eventId = uint256(keccak256("schelling-point-2025"));
+        qv.createEvent(eventId, 100);
 
         vm.stopBroadcast();
+
+        console.log("============================================");
+        console.log("SchellingPointQV deployed to:", address(qv));
+        console.log("Event ID:", eventId);
+        console.log("Chain ID:", block.chainid);
+        console.log("Deployer:", vm.addr(deployerPrivateKey));
+        console.log("============================================");
     }
 }
