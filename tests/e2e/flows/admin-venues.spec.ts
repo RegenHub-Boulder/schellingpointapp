@@ -1,10 +1,20 @@
 import { test, expect } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
+
+test.describe('Admin Venues - Unauthenticated', () => {
+  test('redirects to login page', async ({ page }) => {
+    await page.goto('/admin/venues')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+})
 
 test.describe('Admin Venues Page', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/venues')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/venues', 'alice')
   })
 
   test('page loads with venues management UI', async ({ page }) => {
@@ -49,8 +59,7 @@ test.describe('Admin Venues Page', () => {
 
 test.describe('Admin Venues - Add Venue Modal', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/venues')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/venues', 'alice')
   })
 
   test('Add Venue opens modal', async ({ page }) => {
@@ -103,8 +112,7 @@ test.describe('Admin Venues - Add Venue Modal', () => {
 
 test.describe('Admin Venues - Time Slots', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/venues')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/venues', 'alice')
   })
 
   test('displays Day selector buttons', async ({ page }) => {
@@ -131,10 +139,9 @@ test.describe('Admin Venues - Time Slots', () => {
   })
 })
 
-test.describe('Admin Venues - Edit/Delete (requires admin auth)', () => {
+test.describe('Admin Venues - Edit/Delete', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/venues')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/admin/venues', 'alice')
   })
 
   test('edit venue buttons exist for each venue', async ({ page }) => {

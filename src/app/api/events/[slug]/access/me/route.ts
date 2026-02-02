@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { verifyJWT } from '@/lib/jwt'
 
 // GET /api/events/:slug/access/me - Get current user's access for this event
@@ -22,7 +22,7 @@ export async function GET(
 
     const userId = payload.sub
     const { slug } = await params
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     // Get event by slug
     const { data: event, error: eventError } = await supabase

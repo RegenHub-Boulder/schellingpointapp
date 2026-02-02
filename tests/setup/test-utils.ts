@@ -128,3 +128,47 @@ export async function selectOption(page: Page, selector: string, value: string) 
   await page.locator(selector).click()
   await page.getByRole('option', { name: value }).click()
 }
+
+/**
+ * Mock authenticated state by setting localStorage values.
+ * Note: This only mocks the client-side auth check. Server-side validation
+ * via /api/auth/me will still fail, so tests using this will be skipped
+ * if they reach a server validation check.
+ *
+ * For full E2E testing with authentication, use actual test accounts
+ * with database seeding.
+ */
+export async function mockAuthenticatedState(page: Page) {
+  await page.evaluate(() => {
+    // Mock passkey info
+    const passkeyInfo = {
+      credentialId: 'test-credential-id',
+      userId: 'test-user-id',
+      pubKeyX: '0x' + '1'.repeat(64),
+      pubKeyY: '0x' + '2'.repeat(64)
+    }
+    localStorage.setItem('passkeyInfo', JSON.stringify(passkeyInfo))
+
+    // Mock session key (valid for 7 days)
+    const sessionKey = {
+      privateKey: '0x' + '3'.repeat(64),
+      address: '0x' + '4'.repeat(40),
+      expiry: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
+    }
+    localStorage.setItem('sessionKey', JSON.stringify(sessionKey))
+
+    // Mock auth token (this will fail server validation but allows client-side checks to pass)
+    localStorage.setItem('authToken', 'mock-test-token')
+  })
+}
+
+/**
+ * Clear all authentication state from localStorage
+ */
+export async function clearAuthState(page: Page) {
+  await page.evaluate(() => {
+    localStorage.removeItem('passkeyInfo')
+    localStorage.removeItem('sessionKey')
+    localStorage.removeItem('authToken')
+  })
+}

@@ -1,29 +1,41 @@
 import { test, expect } from '@playwright/test'
 import { waitForPageLoad } from '../../setup/test-utils'
+import { navigateAuthenticated } from '../../setup/auth-helpers'
 
 /**
  * Pre-Event Voting Flow Tests
  *
  * These tests verify the pre-event voting functionality on the sessions page.
- *
- * KNOWN ISSUES (will fail until fixed):
- * - verifyJWT() function doesn't exist - all JWT-protected endpoints fail
- * - jsonwebtoken not in package.json dependencies
- * - Votes endpoint returns 401 for all authenticated requests
- * - useVotes() hook can't fetch user's vote balance
  */
+
+test.describe('Pre-Voting - Unauthenticated', () => {
+  test('sessions page redirects to login', async ({ page }) => {
+    await page.goto('/event/sessions')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+
+  test('my-votes page redirects to login', async ({ page }) => {
+    await page.goto('/event/my-votes')
+    await waitForPageLoad(page)
+
+    // Should redirect to login
+    expect(page.url()).toContain('/login')
+  })
+})
 
 test.describe('Pre-Voting - Sessions Page', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
   })
 
   test('sessions page displays credit balance', async ({ page }) => {
     // Credit bar should show user's voting balance
     const creditBar = page.locator('[data-testid="credit-bar"], text=/credits/i').first()
 
-    // Even without auth, should show some credit indicator
+    // Wait for data to load
     await page.waitForTimeout(1000)
 
     // Credit display may be present
@@ -65,7 +77,6 @@ test.describe('Pre-Voting - Sessions Page', () => {
 
         // State should change (either visually or in class)
         // This works for localStorage-based favorites
-        // For on-chain favorites, it may fail due to auth issues
       }
     }
   })
@@ -138,8 +149,7 @@ test.describe('Pre-Voting - Quadratic Cost', () => {
      * etc.
      */
 
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     // If there's a vote UI that shows cost, verify the math
     // This test documents expected behavior
@@ -152,24 +162,17 @@ test.describe('Pre-Voting - Quadratic Cost', () => {
 })
 
 test.describe('Pre-Voting - My Votes Page', () => {
-  test('my-votes page loads', async ({ page }) => {
-    await page.goto('/event/my-votes')
-    await waitForPageLoad(page)
+  test.beforeEach(async ({ page }) => {
+    await navigateAuthenticated(page, '/event/my-votes', 'alice')
+  })
 
+  test('my-votes page loads', async ({ page }) => {
     // Page should load without crashing
     const pageContent = page.locator('body')
     await expect(pageContent).toBeVisible()
   })
 
   test('my-votes shows favorited sessions or empty state', async ({ page }) => {
-    /**
-     * KNOWN ISSUE: my-votes page shows on-chain votes (favorites) not pre-votes
-     * This conflates two different concepts
-     */
-
-    await page.goto('/event/my-votes')
-    await waitForPageLoad(page)
-
     // Should show either sessions or empty message
     await page.waitForTimeout(2000)
 
@@ -181,9 +184,6 @@ test.describe('Pre-Voting - My Votes Page', () => {
   })
 
   test('vote allocation UI is present', async ({ page }) => {
-    await page.goto('/event/my-votes')
-    await waitForPageLoad(page)
-
     // Should have distribution curve selector
     const curveSelector = page.locator('text=/Even|Linear|Square Root|Exponential/i').first()
 
@@ -199,8 +199,7 @@ test.describe('Pre-Voting - Real-time Updates', () => {
      * On-chain votes don't have real-time subscriptions
      */
 
-    await page.goto('/event/sessions')
-    await waitForPageLoad(page)
+    await navigateAuthenticated(page, '/event/sessions', 'alice')
 
     // Wait for potential WebSocket connection
     await page.waitForTimeout(2000)

@@ -11,11 +11,16 @@ export interface UserWithPasskey {
 }
 
 // Get Supabase client (uses env vars)
+// NEXT_PUBLIC_ prefixed vars are needed for both client and server in Next.js
 function getSupabase() {
-  return createClient<Database>(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(`Supabase config missing: url=${!!supabaseUrl}, key=${!!supabaseKey}`)
+  }
+
+  return createClient<Database>(supabaseUrl, supabaseKey)
 }
 
 export async function getUserByPasskey(pubkeyX: string, pubkeyY: string): Promise<User | null> {
