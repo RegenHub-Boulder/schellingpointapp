@@ -14,6 +14,8 @@ import { useAuthFlow } from '@/hooks/useAuthFlow'
 import { useAuth } from '@/contexts/AuthContext'
 import { createClient } from '@/lib/supabase/client'
 
+const IS_PREVIEW = process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview'
+
 type PageMode = 'loading' | 'email' | 'email-sent' | 'passkey'
 
 function RegisterContent() {
@@ -32,6 +34,12 @@ function RegisterContent() {
 
   // Check for existing Supabase session on mount
   React.useEffect(() => {
+    if (IS_PREVIEW) {
+      setVerifiedEmail('preview@test.local')
+      setMode('passkey')
+      return
+    }
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email) {
         setVerifiedEmail(user.email)
@@ -45,10 +53,13 @@ function RegisterContent() {
   // After auth flow completes, sign out of Supabase and refresh session
   React.useEffect(() => {
     if (status === 'success') {
-      // Clean up Supabase session since we now use passkey auth
-      supabase.auth.signOut().then(() => {
+      if (IS_PREVIEW) {
         refreshSession()
-      })
+      } else {
+        supabase.auth.signOut().then(() => {
+          refreshSession()
+        })
+      }
     }
   }, [status, refreshSession, supabase.auth])
 
