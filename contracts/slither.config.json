@@ -1,9 +1,5 @@
 {
-  "filter_paths": [
-    "lib",
-    "script",
-    "test"
-  ],
+  "filter_paths": "lib,script,test",
   "detectors_to_exclude": [
     "naming-convention",
     "solc-version",

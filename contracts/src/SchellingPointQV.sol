@@ -7,13 +7,13 @@ contract SchellingPointQV {
     // ---------------------------------------------------------------
 
     /// @dev RIP-7212 precompile for secp256r1 (passkey) verification
-    address constant P256 = 0x0000000000000000000000000000000000000100;
+    address private constant P256 = 0x0000000000000000000000000000000000000100;
 
     // ---------------------------------------------------------------
     // Storage
     // ---------------------------------------------------------------
 
-    address public owner;
+    address public immutable owner;
 
     /// @dev identityHash => signer => expiry
     mapping(bytes32 => mapping(address => uint256)) public signers;

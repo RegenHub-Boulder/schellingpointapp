@@ -18,8 +18,8 @@ contract SchellingPointQVTest is Test {
     // Derived identity hash
     bytes32 identityHash;
 
-    // Storage slot for signers mapping (slot 1 because owner is slot 0)
-    uint256 constant SIGNERS_SLOT = 1;
+    // Storage slot for signers mapping (slot 0 because owner is now immutable)
+    uint256 constant SIGNERS_SLOT = 0;
 
     // Event and budget constants
     uint256 constant EVENT_ID = 1;
