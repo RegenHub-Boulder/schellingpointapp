@@ -1048,3 +1048,45 @@ When voting was added, the heart toggle (onToggleFavorite) was changed from togg
 **Files**: src/contexts/AuthContext.tsx, src/app/settings/page.tsx
 ---
 
+### [01:03] [gotcha] Login challenge GET endpoint was being cached by Vercel
+**Details**: The /api/login/challenge GET endpoint had no cache headers, so Next.js/Vercel was caching the response at the edge. This caused stale challenges (5+ minutes old) to be served, which then failed the 5-minute TTL check in getAndConsumeChallenge. Fix: added `export const dynamic = 'force-dynamic'` and `Cache-Control: no-store` header. This was the root cause of the intermittent "Invalid or expired challenge" login failures.
+**Files**: src/app/api/login/challenge/route.ts, src/lib/challenge-store.ts
+---
+
+### [16:02] [database] user_passkeys table refactored out of users table
+**Details**: Migration 012 (20251219120000_012_user_passkeys.sql) created a separate user_passkeys table to support multiple passkeys per user (1:M relationship). The migration:
+
+1. Created user_passkeys table with columns:
+   - id (UUID PK, default gen_random_uuid())
+   - user_id (UUID FK to users.id, ON DELETE CASCADE)
+   - pubkey_x (TEXT NOT NULL) - secp256r1 X coordinate
+   - pubkey_y (TEXT NOT NULL) - secp256r1 Y coordinate  
+   - credential_id (TEXT NOT NULL) - WebAuthn credential ID (base64url)
+   - created_at (TIMESTAMPTZ DEFAULT NOW())
+
+2. Constraints:
+   - UNIQUE(credential_id) - each credential registered once
+   - UNIQUE(pubkey_x, pubkey_y) - each pubkey pair is on-chain identity
+
+3. Indexes created:
+   - idx_user_passkeys_pubkey (pubkey_x, pubkey_y) - for auth lookup
+   - idx_user_passkeys_credential_id - for discoverable login
+   - idx_user_passkeys_user_id - for listing user's passkeys
+
+4. Migration 013 (20251219130000_013_drop_user_passkey_columns.sql) then removed the old columns from users table:
+   - Dropped pubkey_x, pubkey_y, credential_id from users
+   - Dropped idx_users_pubkey, idx_users_credential_id indexes
+
+5. Migration 014 (20251219140000_014_drop_invite_code.sql) also removed invite_code from users table
+
+Current users table columns: email (unique, required), smart_wallet_address (unique, required), display_name, bio, avatar_url, ens_address, payout_address, topics (array), created_at, updated_at
+
+TypeScript types in src/types/supabase.ts properly reflect this split with user_passkeys table definition and UserPasskey type exported from src/lib/db/users.ts.
+**Files**: /workspace/project/supabase/migrations/20251219120000_012_user_passkeys.sql, /workspace/project/supabase/migrations/20251219130000_013_drop_user_passkey_columns.sql, /workspace/project/supabase/migrations/20251219140000_014_drop_invite_code.sql, /workspace/project/src/types/supabase.ts, /workspace/project/src/lib/db/users.ts
+---
+
+### [16:05] [database] user_passkeys table is separate from users
+**Details**: Passkey credentials are stored in a separate `user_passkeys` table (1:M with users), NOT on the users table. Columns: id, user_id (FK), pubkey_x, pubkey_y, credential_id, created_at. Unique constraints on credential_id and (pubkey_x, pubkey_y). The pubkey_x, pubkey_y, credential_id, and invite_code columns were removed from the users table in migrations 013-014.
+**Files**: supabase/migrations/20251219120000_012_user_passkeys.sql, supabase/migrations/20251219130000_013_drop_user_passkey_columns.sql
+---
+
