@@ -18,23 +18,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: DIAGNOSTIC - remove after debugging "Invalid or expired challenge" bug
-    console.log('[login] challengeId received:', challengeId.substring(0, 40) + '...')
-    console.log('[login] signer:', signer)
-
     // Step 1: Verify challenge exists and hasn't expired
     const challenge = getAndConsumeChallenge(challengeId)
     if (!challenge) {
-      // TODO: DIAGNOSTIC - remove after debugging
-      console.log('[login] FAIL: challenge validation returned null')
       return NextResponse.json(
         { error: 'Invalid or expired challenge' },
         { status: 401 }
       )
     }
-
-    // TODO: DIAGNOSTIC - remove after debugging
-    console.log('[login] challenge validated successfully')
 
     // Step 2: Verify signature over challenge
     // Message format: keccak256("login:" + challenge)
