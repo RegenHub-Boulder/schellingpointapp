@@ -133,11 +133,12 @@ test.describe('Favorites - My Schedule Page', () => {
     // Should show empty state message
     await page.waitForTimeout(1000)
 
-    const emptyState = page.locator('text=/No sessions|Browse sessions|Add some/i')
+    // Check for empty state heading specifically (not link text)
+    const emptyStateHeading = page.getByRole('heading', { name: /No sessions saved yet/i })
     const hasSessions = await page.locator('[data-testid="session-card"]').count() > 0
 
-    // Either empty state or sessions
-    expect(await emptyState.isVisible() || hasSessions).toBe(true)
+    // Either empty state heading or sessions
+    expect(await emptyStateHeading.isVisible() || hasSessions).toBe(true)
   })
 
   test('displays favorited sessions', async ({ page }) => {

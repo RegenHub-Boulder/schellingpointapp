@@ -58,43 +58,45 @@ test.describe('Session Proposal - Form Steps', () => {
   })
 
   test('step 1: validates required fields', async ({ page }) => {
-    // Try to proceed without filling required fields
+    // The "Next" button is disabled until required fields are filled
+    // Step 1 requires: title >= 5 chars, description >= 50 chars
     const nextButton = page.locator('button:has-text("Next"), button:has-text("Continue")')
 
-    if (await nextButton.isVisible()) {
-      await nextButton.click()
+    // Next button should be disabled when fields are empty
+    await expect(nextButton).toBeDisabled()
 
-      // Should show validation error or stay on step 1
-      // Either error message appears or we're still on step 1
-      await page.waitForTimeout(500)
+    // Fill only title (not enough)
+    const titleInput = page.locator('input[id="title"]')
+    await titleInput.fill('Test Session Title')
+    await expect(nextButton).toBeDisabled()
 
-      // Check we haven't moved to step 2 (title still visible means we're on step 1)
-      const titleInput = page.locator('input[id="title"], input[name="title"]')
-      const stillOnStep1 = await titleInput.isVisible()
+    // Fill short description (less than 50 chars)
+    const descriptionField = page.locator('textarea[id="description"]')
+    await descriptionField.fill('Short description only')
+    await expect(nextButton).toBeDisabled()
 
-      // If we moved forward, it's a validation bug
-      // For now, just document the behavior
-    }
+    // Fill valid description (>= 50 chars)
+    await descriptionField.fill('This is a valid session description that has more than fifty characters to pass validation.')
+    await expect(nextButton).toBeEnabled()
   })
 
   test('step 2: format selection is present', async ({ page }) => {
-    // Fill step 1 to get to step 2
-    const titleInput = page.locator('input[id="title"], input[name="title"], input[placeholder*="title" i]')
+    // Fill step 1 to get to step 2 (title >= 5 chars, description >= 50 chars)
+    const titleInput = page.locator('input[id="title"]')
     await titleInput.fill('Test Session Title')
 
-    const descriptionField = page.locator('textarea[id="description"], textarea[name="description"]')
-    await descriptionField.fill('This is a test session description with enough content.')
+    const descriptionField = page.locator('textarea[id="description"]')
+    await descriptionField.fill('This is a valid session description that has more than fifty characters to pass validation requirements.')
 
     // Move to next step
     const nextButton = page.locator('button:has-text("Next"), button:has-text("Continue")')
-    if (await nextButton.isVisible()) {
-      await nextButton.click()
-      await page.waitForTimeout(500)
+    await expect(nextButton).toBeEnabled()
+    await nextButton.click()
+    await page.waitForTimeout(500)
 
-      // Format selection should be visible
-      const formatOption = page.locator('text=/Talk|Workshop|Discussion|Panel/i').first()
-      await expect(formatOption).toBeVisible()
-    }
+    // Format selection should be visible on step 2
+    const formatOption = page.locator('text=/Talk|Workshop|Discussion|Panel/i').first()
+    await expect(formatOption).toBeVisible()
   })
 
   test('step 2: track selection is collected but NOT SENT', async ({ page }) => {
@@ -103,27 +105,26 @@ test.describe('Session Proposal - Form Steps', () => {
      * See: /src/app/event/propose/page.tsx lines 148-156
      */
 
-    // Fill step 1
-    const titleInput = page.locator('input[id="title"], input[name="title"], input[placeholder*="title" i]')
+    // Fill step 1 (title >= 5 chars, description >= 50 chars)
+    const titleInput = page.locator('input[id="title"]')
     await titleInput.fill('Test Session Title')
 
-    const descriptionField = page.locator('textarea[id="description"], textarea[name="description"]')
-    await descriptionField.fill('This is a test session description.')
+    const descriptionField = page.locator('textarea[id="description"]')
+    await descriptionField.fill('This is a valid session description that has more than fifty characters to pass validation requirements.')
 
     const nextButton = page.locator('button:has-text("Next"), button:has-text("Continue")')
-    if (await nextButton.isVisible()) {
-      await nextButton.click()
-      await page.waitForTimeout(500)
+    await expect(nextButton).toBeEnabled()
+    await nextButton.click()
+    await page.waitForTimeout(500)
 
-      // Track selection should be visible
-      const trackOption = page.locator('text=/Governance|Technical|DeFi|Social|Creative|Sustainability/i').first()
+    // Track selection should be visible on step 2
+    const trackOption = page.locator('text=/Governance|Technical|DeFi|Social|Creative|Sustainability/i').first()
 
-      // Track is shown in UI - this is good
-      // But the data is lost on submission - this is the bug
-      if (await trackOption.isVisible()) {
-        // Document: Track field exists in UI
-        expect(true).toBe(true)
-      }
+    // Track is shown in UI - this is good
+    // But the data is lost on submission - this is the bug
+    if (await trackOption.isVisible()) {
+      // Document: Track field exists in UI
+      expect(true).toBe(true)
     }
   })
 })
