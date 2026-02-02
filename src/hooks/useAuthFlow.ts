@@ -233,18 +233,36 @@ export function useAuthFlow() {
   }, [])
 
   /**
-   * Complete auth flow: authorize → login
-   * Call this after passkey is created/recovered
+   * Complete auth flow: authorize (if needed) → login
+   * Call this after passkey is created/recovered.
+   * Skips authorization if a valid sessionKey already exists in localStorage.
    */
   const completeAuthFlow = useCallback(async (passkeyInfo: PasskeyInfo): Promise<void> => {
     setError(null)
 
     try {
-      // Step 1: Authorize ephemeral signer (Face ID)
-      setStatus('authorizing')
-      const sessionKey = await authorizeSession(passkeyInfo)
+      // Check for existing valid session key
+      let sessionKey: SessionKey | null = null
+      const storedSession = localStorage.getItem('sessionKey')
+      if (storedSession) {
+        try {
+          const parsed: SessionKey = JSON.parse(storedSession)
+          const currentTime = Math.floor(Date.now() / 1000)
+          if (parsed.expiry > currentTime) {
+            sessionKey = parsed
+          }
+        } catch {
+          // Invalid stored data, will re-authorize
+        }
+      }
 
-      // Step 2: Login to get JWT
+      if (!sessionKey) {
+        // No valid session key — authorize a new ephemeral signer (Face ID)
+        setStatus('authorizing')
+        sessionKey = await authorizeSession(passkeyInfo)
+      }
+
+      // Login to get JWT
       setStatus('logging-in')
       await login(passkeyInfo, sessionKey)
 

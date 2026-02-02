@@ -11,7 +11,6 @@ export function generateChallenge(): { challengeId: string; challenge: string } 
   const nonce = randomBytes(16).toString('hex')
   const challenge = `${timestamp}:${nonce}`
 
-  // Sign the challenge
   const signature = createHmac('sha256', CHALLENGE_SECRET)
     .update(challenge)
     .digest('hex')
@@ -22,29 +21,28 @@ export function generateChallenge(): { challengeId: string; challenge: string } 
 }
 
 export function getAndConsumeChallenge(challengeId: string): string | null {
-  // Parse challengeId: timestamp:nonce:signature
   const parts = challengeId.split(':')
+
   if (parts.length !== 3) {
+    console.error('[challenge] invalid format, parts:', parts.length)
     return null
   }
 
   const [timestamp, nonce, signature] = parts
   const challenge = `${timestamp}:${nonce}`
 
-  // Verify signature
   const expectedSignature = createHmac('sha256', CHALLENGE_SECRET)
     .update(challenge)
     .digest('hex')
 
   if (signature !== expectedSignature) {
-    console.log('Challenge signature mismatch')
+    console.error('[challenge] signature mismatch')
     return null
   }
 
-  // Check expiry
-  const challengeTime = parseInt(timestamp, 10)
-  if (Date.now() - challengeTime > CHALLENGE_TTL_MS) {
-    console.log('Challenge expired')
+  const age = Date.now() - parseInt(timestamp, 10)
+  if (age > CHALLENGE_TTL_MS) {
+    console.error('[challenge] expired, age:', Math.round(age / 1000), 's')
     return null
   }
 

@@ -182,11 +182,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = React.useCallback((): void => {
     localStorage.removeItem('authToken')
+    localStorage.removeItem('sessionKey')
     setToken(null)
     setUser(null)
     setSignerAddress(null)
     setSignerExpiry(null)
-    // Note: We keep passkeyInfo and sessionKey for easy re-login
+    // Keep passkeyInfo so login page shows 1-step Flow (Face ID only)
   }, [])
 
   const refreshUser = React.useCallback(async (): Promise<void> => {

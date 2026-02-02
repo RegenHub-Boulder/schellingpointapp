@@ -6,6 +6,7 @@ import { LogIn, Fingerprint, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Container } from '@/components/layout/container'
+import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { useAuthFlow } from '@/hooks/useAuthFlow'
 
@@ -16,11 +17,24 @@ export default function LoginPage() {
 
   const [isMounted, setIsMounted] = React.useState(false)
   const [hasLocalPasskey, setHasLocalPasskey] = React.useState(false)
+  const [hasValidSession, setHasValidSession] = React.useState(false)
 
   // Wait for client-side hydration
   React.useEffect(() => {
     setIsMounted(true)
     setHasLocalPasskey(!!localStorage.getItem('passkeyInfo'))
+
+    // Check if session key exists and is still valid
+    const storedSession = localStorage.getItem('sessionKey')
+    if (storedSession) {
+      try {
+        const parsed = JSON.parse(storedSession)
+        const currentTime = Math.floor(Date.now() / 1000)
+        setHasValidSession(parsed.expiry > currentTime)
+      } catch {
+        setHasValidSession(false)
+      }
+    }
   }, [])
 
   // After auth flow completes, refresh session so AuthContext knows we're logged in
@@ -45,13 +59,16 @@ export default function LoginPage() {
     }
   }
 
-  // Step tracking - 2 steps if no local passkey (need to discover), 1 step if has local
-  const totalSteps = hasLocalPasskey ? 1 : 2
+  // Step tracking:
+  // - Has valid session key: 0 visible steps (just "logging in..." briefly)
+  // - Has passkey but no session: 1 step (Face ID to authorize)
+  // - No passkey at all: 2 steps (pick passkey + Face ID to authorize)
+  const totalSteps = hasValidSession ? 0 : hasLocalPasskey ? 1 : 2
   const getCurrentStep = () => {
     if (status === 'idle') return 0
-    if (status === 'recovering') return 1 // Step 1: passkey discovery
-    if (status === 'authorizing') return hasLocalPasskey ? 1 : 2 // Step 2 if recovering, Step 1 if has local
-    if (status === 'logging-in' || status === 'success') return totalSteps
+    if (status === 'recovering') return 1
+    if (status === 'authorizing') return hasLocalPasskey ? 1 : 2
+    if (status === 'logging-in' || status === 'success') return Math.max(totalSteps, 1)
     return 0
   }
   const currentStep = getCurrentStep()
@@ -61,22 +78,22 @@ export default function LoginPage() {
     if (status === 'authorizing') return 'Authorizing...'
     if (status === 'logging-in') return 'Logging in...'
     if (status === 'success') return 'Success!'
-    if (hasLocalPasskey) return 'Login with Face ID / Touch ID'
+    if (hasValidSession) return 'Continue'
+    if (hasLocalPasskey) return 'Sign in with Face ID / Touch ID'
     return 'Sign in with Passkey'
   }
 
   const getStepDescription = () => {
     if (status === 'recovering') return 'Select your passkey'
-    if (status === 'authorizing') {
-      return hasLocalPasskey ? 'Authorize your session' : 'Authorize your session'
-    }
+    if (status === 'authorizing') return 'Authorize your session'
     if (status === 'logging-in') return 'Completing login...'
     return null
   }
 
   const getDescription = () => {
     if (status === 'success') return `Logged in as ${user?.displayName || 'User'}`
-    if (hasLocalPasskey) return 'Continue to Schelling Point'
+    if (hasValidSession) return 'Welcome back to Schelling Point'
+    if (hasLocalPasskey) return 'Use Face ID / Touch ID to sign in'
     return 'Select your passkey to sign in'
   }
 
@@ -156,7 +173,9 @@ export default function LoginPage() {
                 {currentStep === 0 && (
                   <div className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
                     <p>
-                      {hasLocalPasskey
+                      {hasValidSession
+                        ? 'Your session is still active. Click to continue.'
+                        : hasLocalPasskey
                         ? 'Use Face ID / Touch ID to verify your identity.'
                         : 'Your device will show available passkeys for this site.'
                       }
@@ -200,9 +219,15 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div className="text-xs text-center text-muted-foreground">
+            <div className="text-xs text-center text-muted-foreground space-y-2">
               <p>
                 Your passkey is stored securely on your device.
+              </p>
+              <p>
+                Don&apos;t have an account?{' '}
+                <Link href="/register" className="text-primary hover:underline font-medium">
+                  Create one
+                </Link>
               </p>
             </div>
           </CardContent>

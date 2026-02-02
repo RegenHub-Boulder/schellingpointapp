@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bell,
   Shield,
@@ -12,12 +13,21 @@ import {
 } from 'lucide-react'
 import { Navbar } from '@/components/layout/navbar'
 import { Container } from '@/components/layout/container'
+import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function SettingsPage() {
+  const router = useRouter()
+  const { user: authUser, logout } = useAuth()
+
+  const handleSignOut = () => {
+    logout()
+    router.push('/')
+  }
+
   const [settings, setSettings] = React.useState({
     // Event Preferences
     autoEnterEvents: true,
@@ -56,13 +66,11 @@ export default function SettingsPage() {
     }))
   }
 
-  const user = {
-    name: 'Alice Chen',
-  }
+  const user = authUser ? { name: authUser.displayName || 'User' } : { name: 'Guest' }
 
   return (
     <div className="min-h-screen flex flex-col bg-muted/30">
-      <Navbar user={user} onSignOut={() => console.log('Sign out')} />
+      <Navbar user={user} onSignOut={handleSignOut} />
 
       <main className="flex-1 py-8">
         <Container>

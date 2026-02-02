@@ -8,10 +8,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Container } from '@/components/layout/container'
 import { Input } from '@/components/ui/input'
+import Link from 'next/link'
 import { extractPublicKey, arrayBufferToBase64Url } from '@/lib/webauthn'
 import { useAuthFlow } from '@/hooks/useAuthFlow'
 import { useAuth } from '@/contexts/AuthContext'
 import { createClient } from '@/lib/supabase/client'
+
+const IS_PREVIEW = process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview'
 
 type PageMode = 'loading' | 'email' | 'email-sent' | 'passkey'
 
@@ -31,6 +34,12 @@ function RegisterContent() {
 
   // Check for existing Supabase session on mount
   React.useEffect(() => {
+    if (IS_PREVIEW) {
+      setVerifiedEmail('preview@test.local')
+      setMode('passkey')
+      return
+    }
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email) {
         setVerifiedEmail(user.email)
@@ -44,10 +53,13 @@ function RegisterContent() {
   // After auth flow completes, sign out of Supabase and refresh session
   React.useEffect(() => {
     if (status === 'success') {
-      // Clean up Supabase session since we now use passkey auth
-      supabase.auth.signOut().then(() => {
+      if (IS_PREVIEW) {
         refreshSession()
-      })
+      } else {
+        supabase.auth.signOut().then(() => {
+          refreshSession()
+        })
+      }
     }
   }, [status, refreshSession, supabase.auth])
 
@@ -273,10 +285,16 @@ function RegisterContent() {
 
               <div className="text-xs text-center text-muted-foreground space-y-2">
                 <p>
-                  We'll send you a magic link to verify your email address.
+                  We&apos;ll send you a magic link to verify your email address.
                 </p>
                 <p>
-                  After verification, you'll create a passkey to secure your account.
+                  After verification, you&apos;ll create a passkey to secure your account.
+                </p>
+                <p>
+                  Already have a passkey?{' '}
+                  <Link href="/login" className="text-primary hover:underline font-medium">
+                    Sign in
+                  </Link>
                 </p>
               </div>
             </CardContent>
@@ -413,6 +431,12 @@ function RegisterContent() {
               </p>
               <p>
                 This creates a secure passkey that stays on your device.
+              </p>
+              <p>
+                Already have a passkey?{' '}
+                <Link href="/login" className="text-primary hover:underline font-medium">
+                  Sign in
+                </Link>
               </p>
             </div>
           </CardContent>
