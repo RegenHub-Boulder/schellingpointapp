@@ -9,7 +9,6 @@ import { Container } from '@/components/layout/container'
 import { CreditBar } from '@/components/voting/credit-bar'
 import { Badge } from '@/components/ui/badge'
 import { useEvent } from '@/hooks/use-event'
-import { useVotes } from '@/hooks/use-votes'
 import { useAuth } from '@/hooks/useAuth'
 import { useSessions } from '@/hooks/use-sessions'
 
@@ -112,7 +111,6 @@ export default function EventLayout({
 
   // Fetch event data
   const { event, votingConfig, loading: eventLoading, error: eventError } = useEvent()
-  const { balance, loading: votesLoading } = useVotes()
 
   // Fetch approved sessions for the count (same filter as sessions page)
   const { sessions, loading: sessionsLoading } = useSessions({ status: 'approved' })
@@ -137,10 +135,10 @@ export default function EventLayout({
   // Calculate event status
   const eventStatus = getEventStatus(event, votingConfig)
 
-  // Get credits from votes balance (or voting config default)
+  // Get total credit budget from voting config
   const credits = isLoggedIn ? {
-    total: balance.totalCredits || votingConfig?.preVoteCredits || 100,
-    spent: balance.creditsSpent || 0,
+    total: votingConfig?.preVoteCredits || 100,
+    spent: 0,
   } : undefined
 
   // User info for navbar
