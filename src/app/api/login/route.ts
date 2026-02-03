@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { getUserByPasskey } from '@/lib/db/users'
 import { signJWT } from '@/lib/jwt'
-import { SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointVotes'
+import { SCHELLING_POINT_QV_ABI as SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointQV'
 import { getAndConsumeChallenge } from '@/lib/challenge-store'
 
 export async function POST(request: NextRequest) {
