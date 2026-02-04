@@ -6,7 +6,6 @@ import { Presentation, Calendar, ClipboardList, Heart, BarChart3, FileText, User
 import { Navbar } from '@/components/layout/navbar'
 import { TabsNav } from '@/components/layout/tabs-nav'
 import { Container } from '@/components/layout/container'
-import { CreditBar } from '@/components/voting/credit-bar'
 import { Badge } from '@/components/ui/badge'
 import { useEvent } from '@/hooks/use-event'
 import { useAuth } from '@/hooks/useAuth'
@@ -215,11 +214,6 @@ export default function EventLayout({
               )}
             </div>
 
-            {credits && (
-              <div className="sm:hidden">
-                <CreditBar total={credits.total} spent={credits.spent} />
-              </div>
-            )}
           </div>
         </Container>
       </div>
