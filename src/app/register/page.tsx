@@ -275,7 +275,7 @@ function RegisterContent() {
                 <Button
                   type="submit"
                   size="lg"
-                  variant="success"
+                  variant="secondary"
                   className="w-full"
                   loading={isSendingEmail}
                   disabled={isSendingEmail || !email}
@@ -417,7 +417,7 @@ function RegisterContent() {
             {status !== 'success' && (
               <Button
                 size="lg"
-                variant="success"
+                variant="secondary"
                 className="w-full"
                 onClick={handleCreatePasskey}
                 loading={isLoading}

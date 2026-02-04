@@ -219,11 +219,11 @@ export default function LoginPage() {
             )}
 
             {!hasLocalPasskey && status !== 'success' && (
-              <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-4 text-center space-y-3">
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center space-y-3">
                 <p className="text-sm font-medium">
                   Don&apos;t have an account yet?
                 </p>
-                <Button asChild variant="success" size="lg" className="w-full">
+                <Button asChild variant="secondary" size="lg" className="w-full">
                   <Link href="/register">
                     Register Here
                   </Link>
