@@ -30,6 +30,7 @@ export type AuthFlowStatus = 'idle' | 'recovering' | 'authorizing' | 'logging-in
 export function useAuthFlow() {
   const [status, setStatus] = useState<AuthFlowStatus>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [needsReregister, setNeedsReregister] = useState(false)
 
   /**
    * Recover passkey info using discoverable credentials (for login when localStorage is empty)
@@ -264,7 +265,28 @@ export function useAuthFlow() {
 
       // Login to get JWT
       setStatus('logging-in')
-      await login(passkeyInfo, sessionKey)
+      try {
+        await login(passkeyInfo, sessionKey)
+      } catch (loginErr) {
+        // If login fails because the on-chain signer is gone/expired,
+        // clear stale session and re-authorize
+        const msg = loginErr instanceof Error ? loginErr.message : ''
+        if (msg.includes('not authorized or expired')) {
+          try {
+            localStorage.removeItem('sessionKey')
+            setStatus('authorizing')
+            sessionKey = await authorizeSession(passkeyInfo)
+            setStatus('logging-in')
+            await login(passkeyInfo, sessionKey)
+          } catch {
+            // Re-authorize also failed — credentials are fundamentally broken
+            setNeedsReregister(true)
+            throw loginErr
+          }
+        } else {
+          throw loginErr
+        }
+      }
 
       setStatus('success')
     } catch (err) {
@@ -299,6 +321,10 @@ export function useAuthFlow() {
     } catch (err) {
       setStatus('error')
       const message = err instanceof Error ? err.message : 'Login failed'
+      // If passkey recovery or lookup failed, credentials are gone
+      if (message.includes('not found') || message.includes('not registered')) {
+        setNeedsReregister(true)
+      }
       setError(message)
       throw err
     }
@@ -307,6 +333,16 @@ export function useAuthFlow() {
   const reset = useCallback(() => {
     setStatus('idle')
     setError(null)
+    setNeedsReregister(false)
+  }, [])
+
+  const clearAuth = useCallback(() => {
+    localStorage.removeItem('passkeyInfo')
+    localStorage.removeItem('sessionKey')
+    localStorage.removeItem('authToken')
+    setStatus('idle')
+    setError(null)
+    setNeedsReregister(false)
   }, [])
 
   return {
@@ -318,6 +354,8 @@ export function useAuthFlow() {
     completeAuthFlow,
     loginFlow,
     reset,
+    clearAuth,
+    needsReregister,
     isLoading: status === 'recovering' || status === 'authorizing' || status === 'logging-in'
   }
 }
