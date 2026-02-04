@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
-import { SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointVotes'
+import { SCHELLING_POINT_QV_ABI as SCHELLING_POINT_VOTES_ABI } from '@/lib/contracts/SchellingPointQV'
 
 export const dynamic = 'force-dynamic'
 

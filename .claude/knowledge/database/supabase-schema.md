@@ -3,12 +3,23 @@
 ## Core Tables (15 total)
 
 ### Users & Events
-1. **users** - User profiles with passkey credentials
+1. **users** - User profiles
    - Primary key: id (uuid)
-   - pubkey_x, pubkey_y (WebAuthn passkey coordinates, secp256r1)
-   - invite_code (single-use registration code)
-   - payout_address, email, display_name, bio
+   - email (unique, not null), smart_wallet_address (unique, not null)
+   - display_name, bio, avatar_url
+   - ens_address, payout_address
    - topics array
+   - created_at, updated_at
+   - NOTE: passkey columns (pubkey_x, pubkey_y, credential_id, invite_code) were removed in migrations 013-014
+
+1b. **user_passkeys** - WebAuthn passkey credentials (1:M with users)
+   - Primary key: id (uuid)
+   - user_id (FK → users.id, CASCADE delete)
+   - pubkey_x, pubkey_y (secp256r1 coordinates)
+   - credential_id (unique, base64url WebAuthn credential)
+   - created_at
+   - Unique constraints: (credential_id), (pubkey_x, pubkey_y)
+   - Indexes: idx_user_passkeys_pubkey, idx_user_passkeys_credential_id, idx_user_passkeys_user_id
 
 2. **events** - Event metadata
    - slug, dates, access control
@@ -58,10 +69,11 @@
 
 16. **merger_requests** - Session merge proposals with counter-proposal support
 
-## Passkey Migration (010)
-- Replaced smart_wallet_address with passkey credentials
-- Added: invite_code, pubkey_x, pubkey_y
-- Indexes: idx_users_invite_code, idx_users_pubkey
+## Passkey Migrations
+- Migration 010: Added passkey columns to users table (initial)
+- Migration 012: Created separate `user_passkeys` table (1:M)
+- Migration 013: Dropped passkey columns from users table (pubkey_x, pubkey_y, credential_id)
+- Migration 014: Dropped invite_code from users table
 
 ## RLS Policies
 - Users: Everyone views, users update own profile
@@ -71,4 +83,4 @@
 - Event access: User-scoped visibility
 
 ## Migration Files
-Located in `/supabase/migrations/` (migrations 001-010)
+Located in `/supabase/migrations/` (migrations 001-014)

@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { VoteCounter } from '@/components/voting/vote-counter'
 import { useSession } from '@/hooks/use-session'
-import { useVotes } from '@/hooks/use-votes'
+import { useVotes } from '@/hooks/useVotes'
 import { useAuth } from '@/hooks'
 
 const formatIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -42,9 +42,12 @@ export function SessionDetailClient() {
   // Fetch session data from API
   const { session, hosts, votes: voteStats, loading, error } = useSession(sessionId)
 
-  // Voting
-  const { balance, getVoteForSession, castVote } = useVotes()
-  const userVotes = getVoteForSession(sessionId)
+  // Voting - use new useVotes hook with event context
+  const sessionIds = React.useMemo(() => [sessionId], [sessionId])
+  const { votes, creditsRemaining: remainingCreditsFromHook, setVotes, flush } = useVotes({
+    sessionIds,
+  })
+  const userVotes = votes[sessionId] || 0
 
   const [isFavorited, setIsFavorited] = React.useState(false)
 
@@ -53,7 +56,7 @@ export function SessionDetailClient() {
       // Could show a sign-in prompt
       return
     }
-    await castVote(sessionId, newVotes)
+    setVotes(sessionId, newVotes)
   }
 
   // Loading state
@@ -83,7 +86,7 @@ export function SessionDetailClient() {
 
   const FormatIcon = formatIcons[session.format] || Mic
   const primaryHost = hosts?.find(h => h.isPrimary) || hosts?.[0]
-  const remainingCredits = balance.creditsRemaining
+  const remainingCredits = remainingCreditsFromHook
   const totalVotes = voteStats?.preVote?.totalVotes || 0
   const totalCreditsSpent = voteStats?.preVote?.totalCreditsSpent || 0
 

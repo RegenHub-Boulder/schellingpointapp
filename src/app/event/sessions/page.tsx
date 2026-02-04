@@ -10,10 +10,9 @@ import { CreditBar } from '@/components/voting/credit-bar'
 import { SessionCard } from '@/components/sessions/session-card'
 import { cn } from '@/lib/utils'
 import { useSessions, Session } from '@/hooks/use-sessions'
-import { useVotes } from '@/hooks/use-votes'
 import { useFavorites } from '@/hooks/use-favorites'
 import { useAuth, useEvent, useRealtimeVotes } from '@/hooks'
-import { useOnChainVotes, useVoteMutation } from '@/hooks/useOnChainVotes'
+import { useVotes } from '@/hooks/useVotes'
 
 // Transform API session to UI format
 function transformSession(session: Session) {
@@ -71,94 +70,53 @@ export default function SessionsPage() {
     eventId: event?.id || '',
     enabled: !!event?.id,
     onVoteUpdate: () => {
-      // Refetch sessions to get updated vote counts
       refetchSessions()
     },
   })
 
-  // Fetch user's votes
-  const { balance, getVoteForSession, castVote } = useVotes()
+  // Favorites persisted to localStorage only
+  const { isFavorited, toggleFavorite } = useFavorites()
 
-  // Favorites persisted to localStorage (fallback)
-  const { favorites, isFavorited, toggleFavorite } = useFavorites()
-
-  // On-chain voting - fetch votes with React Query caching
+  // New useVotes hook for quadratic voting with debounced sync
   const sessionIds = React.useMemo(() => apiSessions.map(s => s.id), [apiSessions])
+
   const {
-    votes: onChainVotes,
-    isLoading: loadingOnChainVotes,
-  } = useOnChainVotes({
-    sessionIds,
-    enabled: isLoggedIn && apiSessions.length > 0
-  })
+    votes: userVoteMap,
+    creditsSpent,
+    creditsRemaining,
+    setVotes,
+    isLoading: votesLoading,
+    isSyncing,
+  } = useVotes({ sessionIds })
 
-  // Mutation hook for casting votes
-  const { castVote: castOnChainVote, isPending: isVoting } = useVoteMutation()
-
-  // Check if session is favorited (on-chain or localStorage fallback)
-  const isSessionFavorited = React.useCallback((sessionId: string): boolean => {
-    if (isLoggedIn) {
-      // onChainVotes is keyed by session UUID directly
-      return onChainVotes[sessionId] === 1
-    }
-    return isFavorited(sessionId)
-  }, [isLoggedIn, onChainVotes, isFavorited])
-
-  // Transform API sessions and add user votes
+  // Transform API sessions and add user votes + favorites
   const sessions = React.useMemo(() => {
     return apiSessions.map(session => {
       const transformed = transformSession(session)
-      const userVotes = getVoteForSession(session.id)
       return {
         ...transformed,
-        userVotes,
-        isFavorited: isSessionFavorited(session.id),
+        userVotes: userVoteMap[session.id] || 0,
+        isFavorited: isFavorited(session.id),
       }
     })
-  }, [apiSessions, getVoteForSession, isSessionFavorited])
+  }, [apiSessions, userVoteMap, isFavorited])
 
   const [search, setSearch] = React.useState('')
   const [format, setFormat] = React.useState('all')
   const [sort, setSort] = React.useState('votes')
   const [showFilters, setShowFilters] = React.useState(false)
 
-  // Use real credits from the votes hook
-  const totalCredits = balance.totalCredits
-  const spentCredits = balance.creditsSpent
-  const remainingCredits = balance.creditsRemaining
+  const totalCredits = 100
+  const spentCredits = creditsSpent
+  const remainingCredits = creditsRemaining
 
-  const handleVote = async (sessionId: string, votes: number) => {
-    if (!user) {
-      // Could show a sign-in prompt here
-      return
-    }
-
-    const result = await castVote(sessionId, votes)
-    if (!result.success) {
-      // Could show an error toast here
-      console.error('Failed to cast vote:', result.error)
-    } else {
-      // Refetch sessions to get updated vote counts
-      refetchSessions()
-    }
+  const handleVote = (sessionId: string, votes: number) => {
+    if (!user) return
+    setVotes(sessionId, votes)
   }
 
   const handleToggleFavorite = async (sessionId: string) => {
-    if (!isLoggedIn) {
-      // Fallback to localStorage for non-logged-in users
-      toggleFavorite(sessionId)
-      return
-    }
-
-    const currentValue = onChainVotes[sessionId] || 0
-    const newValue = currentValue === 1 ? 0 : 1
-
-    try {
-      // useVoteMutation automatically invalidates cache on success
-      await castOnChainVote({ sessionId, value: newValue })
-    } catch (err) {
-      console.error('Failed to toggle favorite on-chain:', err)
-    }
+    toggleFavorite(sessionId)
   }
 
   // Filter and sort sessions

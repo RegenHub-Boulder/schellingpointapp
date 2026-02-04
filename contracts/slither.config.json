@@ -1,0 +1,13 @@
+{
+  "filter_paths": "lib,script,test",
+  "detectors_to_exclude": [
+    "naming-convention",
+    "solc-version",
+    "assembly",
+    "low-level-calls",
+    "timestamp",
+    "similar-names"
+  ],
+  "exclude_informational": false,
+  "exclude_optimization": false
+}

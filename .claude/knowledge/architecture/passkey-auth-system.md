@@ -59,7 +59,8 @@ The system uses a localStorage-based architecture with NO JWT tokens or server-s
 - User registers at `/register?code=INVITE_CODE`
 - Creates WebAuthn passkey (P-256) via `navigator.credentials.create()`
 - Public key coordinates (X, Y) extracted from CBOR attestationObject
-- Backend `/api/register` validates invite code, stores pubkey in Supabase, burns code
+- Backend `/api/register` validates invite code, stores pubkey in `user_passkeys` table (1:M with users), burns code
+- A user can have multiple passkeys (multi-device support) — each stored as a separate row in `user_passkeys`
 - **localStorage stores**: `{ credentialId, userId, pubKeyX, pubKeyY }`
 
 ### Gate 2: Authorization (On-chain Signer)
