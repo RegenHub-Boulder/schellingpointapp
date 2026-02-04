@@ -79,7 +79,6 @@ export default function LoginPage() {
     if (status === 'logging-in') return 'Logging in...'
     if (status === 'success') return 'Success!'
     if (hasValidSession) return 'Continue'
-    if (hasLocalPasskey) return 'Sign in with Face ID / Touch ID'
     return 'Sign in with Passkey'
   }
 
@@ -93,7 +92,7 @@ export default function LoginPage() {
   const getDescription = () => {
     if (status === 'success') return `Logged in as ${user?.displayName || 'User'}`
     if (hasValidSession) return 'Welcome back to Schelling Point'
-    if (hasLocalPasskey) return 'Use Face ID / Touch ID to sign in'
+    if (hasLocalPasskey) return 'Use your passkey to sign in'
     return 'Select your passkey to sign in'
   }
 
@@ -176,7 +175,7 @@ export default function LoginPage() {
                       {hasValidSession
                         ? 'Your session is still active. Click to continue.'
                         : hasLocalPasskey
-                        ? 'Use Face ID / Touch ID to verify your identity.'
+                        ? 'Your device will prompt you to verify your identity.'
                         : 'Your device will show available passkeys for this site.'
                       }
                     </p>
@@ -220,11 +219,11 @@ export default function LoginPage() {
             )}
 
             {!hasLocalPasskey && status !== 'success' && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center space-y-3">
+              <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-4 text-center space-y-3">
                 <p className="text-sm font-medium">
                   Don&apos;t have an account yet?
                 </p>
-                <Button asChild variant="outline" className="w-full">
+                <Button asChild variant="success" size="lg" className="w-full">
                   <Link href="/register">
                     Register Here
                   </Link>

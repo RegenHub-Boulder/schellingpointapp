@@ -214,11 +214,11 @@ function RegisterContent() {
     if (status === 'authorizing') return 'Authorizing session...'
     if (status === 'logging-in') return 'Logging in...'
     if (status === 'success') return 'Success!'
-    return 'Create Account with Face ID / Touch ID'
+    return 'Create Account with Passkey'
   }
 
   const getStepDescription = () => {
-    if (isCreatingPasskey) return 'Create your passkey with Face ID / Touch ID'
+    if (isCreatingPasskey) return 'Creating your passkey...'
     if (status === 'authorizing') return 'Authorize your session for voting'
     if (status === 'logging-in') return 'Completing setup...'
     return null
@@ -275,6 +275,7 @@ function RegisterContent() {
                 <Button
                   type="submit"
                   size="lg"
+                  variant="success"
                   className="w-full"
                   loading={isSendingEmail}
                   disabled={isSendingEmail || !email}
@@ -369,7 +370,7 @@ function RegisterContent() {
             <CardDescription>
               {status === 'success'
                 ? 'Redirecting to event...'
-                : 'Register with Face ID or Touch ID to complete setup'
+                : 'Create a passkey to complete setup'
               }
             </CardDescription>
           </CardHeader>
@@ -416,6 +417,7 @@ function RegisterContent() {
             {status !== 'success' && (
               <Button
                 size="lg"
+                variant="success"
                 className="w-full"
                 onClick={handleCreatePasskey}
                 loading={isLoading}
