@@ -13,7 +13,7 @@ import { useAuthFlow } from '@/hooks/useAuthFlow'
 export default function LoginPage() {
   const router = useRouter()
   const { isLoggedIn, user, refreshSession } = useAuth()
-  const { status, error, loginFlow, reset, isLoading } = useAuthFlow()
+  const { status, error, loginFlow, reset, clearAuth, needsReregister, isLoading } = useAuthFlow()
 
   const [isMounted, setIsMounted] = React.useState(false)
   const [hasLocalPasskey, setHasLocalPasskey] = React.useState(false)
@@ -206,6 +206,20 @@ export default function LoginPage() {
                 >
                   Try Again
                 </Button>
+
+                {needsReregister && (
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      clearAuth()
+                      router.push('/register')
+                    }}
+                  >
+                    Start Fresh (Re-register)
+                  </Button>
+                )}
 
                 <Button
                   size="lg"
