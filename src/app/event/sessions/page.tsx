@@ -79,7 +79,6 @@ export default function SessionsPage() {
 
   // New useVotes hook for quadratic voting with debounced sync
   const sessionIds = React.useMemo(() => apiSessions.map(s => s.id), [apiSessions])
-  const eventId = process.env.NEXT_PUBLIC_EVENT_ID || ''
 
   const {
     votes: userVoteMap,
@@ -88,7 +87,7 @@ export default function SessionsPage() {
     setVotes,
     isLoading: votesLoading,
     isSyncing,
-  } = useVotes({ eventId, sessionIds })
+  } = useVotes({ sessionIds })
 
   // Transform API sessions and add user votes + favorites
   const sessions = React.useMemo(() => {

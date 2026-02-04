@@ -1090,3 +1090,120 @@ TypeScript types in src/types/supabase.ts properly reflect this split with user_
 **Files**: supabase/migrations/20251219120000_012_user_passkeys.sql, supabase/migrations/20251219130000_013_drop_user_passkey_columns.sql
 ---
 
+### [23:28] [auth] JWT auth system now exists (knowledge docs outdated)
+**Details**: The knowledge docs claim "NO JWT/SESSION middleware" but this is outdated. The current implementation uses JWT tokens via the `jose` library stored in localStorage as `authToken`. The flow: challenge-response via ephemeral signer → JWT issued with payload {sub, pubKeyX, pubKeyY, displayName, email, signerAddress, signerExpiry}. API routes validate JWT via Authorization Bearer header. /api/auth/me refreshes user data from JWT. This is a hybrid model: JWT for API auth + localStorage for passkey/session key storage.
+**Files**: src/contexts/AuthContext.tsx, src/app/api/login/route.ts, src/app/api/login/challenge/route.ts, src/lib/jwt.ts
+---
+
+### [23:54] [gotcha] Immutable storage layout change in SchellingPointQV contract
+**Details**: When the `owner` variable in SchellingPointQV was changed from `address public owner` to `address public immutable owner`, the storage layout changed:
+
+BEFORE (owner as storage variable):
+- owner at slot 0
+- signers mapping at slot 1
+- nonces mapping at slot 2
+
+AFTER (owner as immutable):
+- owner stored in bytecode, NOT in storage
+- signers mapping at slot 0 (shifted down)
+- nonces mapping at slot 1 (shifted down)
+
+The test file `/workspace/project/contracts/test/SchellingPointQV.t.sol` uses `vm.store()` to manually set signer authorization by writing directly to the signers mapping storage slot. The constant `SIGNERS_SLOT` had to be updated from 1 to 0 after making owner immutable.
+
+The storage slot calculation for nested mappings still works the same way:
+```solidity
+bytes32 innerSlot = keccak256(abi.encode(identityHash, SIGNERS_SLOT));
+bytes32 signerSlot = keccak256(abi.encode(signer, innerSlot));
+vm.store(address(qv), signerSlot, bytes32(_expiry));
+```
+
+All 37 tests pass after this fix.
+**Files**: /workspace/project/contracts/test/SchellingPointQV.t.sol, /workspace/project/contracts/src/SchellingPointQV.sol
+---
+
+### [23:56] [deployment] SchellingPointQV deployment on Base Sepolia
+**Details**: Contract deployed to 0x1e3703d4e2135dE24450FDA5cf18c18c66711523 on Base Sepolia (chain 84532). Event ID: 101310439360068229198498235905453178362848215801890223219690675748118742731958 (keccak256("schelling-point-2025") cast to uint256). Budget: 100 credits. Deployer: 0x0257aD14F8bAeccd281f66D5f57473E5EFbeDF5C. Verification pending (needs BASESCAN_API_KEY).
+**Files**: contracts/src/SchellingPointQV.sol, contracts/script/Deploy.s.sol
+---
+
+### [00:03] [api] SchellingPointQV contract ABI and new API routes
+**Details**: The contract was overhauled from SchellingPointVotes to SchellingPointQV. Key changes:
+- Contract address: 0x1e3703d4e2135dE24450FDA5cf18c18c66711523
+- EVENT_ID constant: 101310439360068229198498235905453178362848215801890223219690675748118742731958
+- New functions: createEvent, closeEvent, allocate, batchAllocate, getAllocations, getRemainingBudget
+- New mappings: events(eventId), allocations(eventId, identityHash, topicId), totalSpent(eventId, identityHash)
+- New events: Allocation, EventCreated, EventClosed (replaces Vote event)
+- Old vote/batchVote functions replaced by allocate/batchAllocate (credit-based, event-scoped)
+- New API routes: POST /api/vote/allocate (uses JWT auth + batchAllocate), GET /api/votes (reads allocations + remainingBudget)
+- Old routes deleted: /api/vote, /api/vote/batch, /api/events/[slug]/votes, /api/events/[slug]/votes/me
+- Existing routes (authorize, nonce, login) updated to import from SchellingPointQV with alias
+- NOTE: src/hooks/useVoting.ts and src/hooks/useOnChainVotes.ts still import from old SchellingPointVotes (needs update in frontend task)
+**Files**: src/lib/contracts/SchellingPointQV.ts, src/app/api/vote/allocate/route.ts, src/app/api/votes/route.ts, src/app/api/authorize/route.ts, src/app/api/nonce/route.ts, src/app/api/login/route.ts
+---
+
+### [00:15] [architecture] Voting system overhaul to SchellingPointQV
+**Details**: The voting system was completely overhauled. Old contract SchellingPointVotes.sol replaced with SchellingPointQV.sol. Key changes: (1) Idempotent allocation system - no nonces needed, replays are no-ops. (2) On-chain budget enforcement per identity per event (100 credits default). (3) Delta-based credit tracking in batchAllocate. (4) Event lifecycle management (createEvent/closeEvent, onlyOwner). (5) Single useVotes hook replaces three old hooks (useVoting, useOnChainVotes, use-votes). (6) 2s frontend debounce with flush on navigation. (7) Heart/favorites are localStorage only, not on-chain. (8) Contract deployed to Base Sepolia at 0x1e3703d4e2135dE24450FDA5cf18c18c66711523. Event ID stored as env var NEXT_PUBLIC_EVENT_ID. Deployer wallet: 0x0257aD14F8bAeccd281f66D5f57473E5EFbeDF5C.
+**Files**: contracts/src/SchellingPointQV.sol, src/hooks/useVotes.ts, src/lib/contracts/SchellingPointQV.ts, src/app/api/vote/allocate/route.ts, src/app/api/votes/route.ts
+---
+
+### [22:21] [architecture] eventId vs EVENT_SLUG identification system - redundant coupling
+**Details**: CRITICAL FINDING: The voting system uses TWO identification systems for events, creating unnecessary coupling:
+
+**Current Architecture (PROBLEMATIC):**
+1. Frontend: Uses NEXT_PUBLIC_EVENT_ID (UUID from Supabase events.id) - sourced from environment variable
+2. Frontend fallback: Uses process.env.NEXT_PUBLIC_EVENT_ID hardcoded to '' if not set (src/app/event/sessions/page.tsx:82, src/app/event/my-votes/page.tsx:20)
+3. Smart Contract: Expects eventId as uint256 (not UUID)
+4. API routes: Fetch event by slug, extract event.id, use it with contract
+
+**The Redundancy Problem:**
+- src/lib/config.ts defines EVENT_SLUG from NEXT_PUBLIC_EVENT_SLUG (defaults 'ethdenver-2025')
+- useEvent hook (src/hooks/use-event.ts) fetches from /api/events/[slug] using EVENT_SLUG
+- This returns event.id (UUID)
+- useVotes hook needs this UUID passed as prop, but pages hardcode NEXT_PUBLIC_EVENT_ID instead
+- Contract functions (batchAllocate, getAllocations, getRemainingBudget) receive eventId as uint256
+
+**Smart Contract Storage (src/contracts/src/SchellingPointQV.sol):**
+- mapping(uint256 => EventInfo) events - expects numeric eventId
+- mapping(uint256 => mapping(bytes32 => mapping(bytes32 => uint256))) allocations - eventId is uint256
+- createEvent(uint256 eventId, uint256 budget) - owner function to initialize event
+- All allocation/read functions use eventId as first key
+
+**API Routes:**
+- /api/votes (src/app/api/votes/route.ts): Receives eventId as query param, passes to contract.getAllocations(pubKey, eventId, topicIds)
+- /api/vote/allocate (src/app/api/vote/allocate/route.ts): Receives eventId in request body, passes to contract.batchAllocate(pubKey, signer, eventId, topicIds, credits, sig)
+- /api/events/[slug] (src/app/api/events/[slug]/route.ts): Returns event.id (Supabase UUID)
+
+**Frontend Implementation Gaps:**
+- /src/app/event/sessions/page.tsx: Line 82 uses 'const eventId = process.env.NEXT_PUBLIC_EVENT_ID || \"\"' instead of fetching from useEvent
+- /src/app/event/my-votes/page.tsx: Line 20 same hardcoded pattern
+- /src/app/event/sessions/[id]/session-detail-client.tsx: Line 50 uses event?.id from useEvent (correct approach)
+- /src/app/admin/sessions/page.tsx: Line 136 uses event?.id from useEvent (correct approach)
+
+**The Type Mismatch:**
+- Contract expects numeric eventId (uint256)
+- Supabase events.id is UUID string
+- Frontend environment variable NEXT_PUBLIC_EVENT_ID is likely undefined or UUID string
+- This likely causes type coercion or parsing errors at runtime
+
+**Recommendation:**
+1. Always fetch event via useEvent hook using EVENT_SLUG
+2. Extract event.id from the response
+3. Pass event.id to useVotes instead of environment variable
+4. Contract needs to accept either UUID string (convert to uint256 hash) OR migrate to use slug-based identification
+5. Consider using keccak256(slug) as the on-chain eventId instead of numeric IDs
+**Files**: src/app/api/votes/route.ts, src/app/api/vote/allocate/route.ts, src/hooks/useVotes.ts, src/app/event/sessions/page.tsx, src/app/event/my-votes/page.tsx, src/lib/config.ts, src/hooks/use-event.ts, contracts/src/SchellingPointQV.sol
+---
+
+### [04:06] [architecture] Three different event identifiers in the system
+**Details**: The system has three distinct "event ID" concepts:
+
+1. **On-chain eventId** (uint256) — `keccak256("schelling-point-2025")` = `101310439360068229198498235905453178362848215801890223219690675748118742731958`. Used by the SchellingPointQV contract for voting. Stored as `EVENT_ID` constant in `src/lib/contracts/SchellingPointQV.ts`. The event name string is defined as `EVENT_NAME` in `src/lib/config.ts`.
+
+2. **Supabase event UUID** — `events.id` primary key. Used by `useEvent()` hook for metadata (dates, venues, budget config). Completely separate from on-chain voting.
+
+3. **Event slug** — `events.slug` (e.g., 'ethdenver-2025'). Used for API routes like `/api/events/{slug}`. Configured via `EVENT_SLUG` in `src/lib/config.ts`.
+
+The voting system (useVotes, /api/votes, /api/vote/allocate) uses the on-chain EVENT_ID as a server-side constant — it is NOT passed from the client. The contract's "event" = the whole unconference. The contract's "topics" = individual sessions (hashed from session UUIDs via `keccak256(toUtf8Bytes(sessionUuid))`).
+**Files**: src/lib/config.ts, src/lib/contracts/SchellingPointQV.ts, src/hooks/useVotes.ts, src/app/api/votes/route.ts, src/app/api/vote/allocate/route.ts, contracts/script/Deploy.s.sol
+---
+

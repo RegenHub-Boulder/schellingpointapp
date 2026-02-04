@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ethers } from 'ethers'
+import { EVENT_ID } from '@/lib/contracts/SchellingPointQV'
 
 /**
  * useVotes - single hook for quadratic voting allocations
@@ -39,7 +40,6 @@ interface SessionKey {
 }
 
 interface UseVotesOptions {
-  eventId: string
   sessionIds: string[] // session UUIDs
 }
 
@@ -147,15 +147,15 @@ function buildTopicMaps(sessionIds: string[]) {
 
 const voteQueryKeys = {
   all: ['votes'] as const,
-  event: (eventId: string, sessionIds: string[]) =>
-    ['votes', eventId, ...sessionIds.sort()] as const,
+  event: (sessionIds: string[]) =>
+    ['votes', EVENT_ID, ...sessionIds.sort()] as const,
 }
 
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useVotes({ eventId, sessionIds }: UseVotesOptions): UseVotesReturn {
+export function useVotes({ sessionIds }: UseVotesOptions): UseVotesReturn {
   const queryClient = useQueryClient()
 
   // ---- Stable references for topic mapping ----
@@ -179,7 +179,7 @@ export function useVotes({ eventId, sessionIds }: UseVotesOptions): UseVotesRetu
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ---- React Query: fetch current allocations from backend ----
-  const queryKey = voteQueryKeys.event(eventId, sessionIds)
+  const queryKey = voteQueryKeys.event(sessionIds)
 
   const query = useQuery<Record<string, number>>({
     queryKey,
@@ -194,7 +194,7 @@ export function useVotes({ eventId, sessionIds }: UseVotesOptions): UseVotesRetu
       }
 
       const response = await fetch(
-        `/api/votes?eventId=${encodeURIComponent(eventId)}&topicIds=${topicIds.map(encodeURIComponent).join(',')}`,
+        `/api/votes?topicIds=${topicIds.map(encodeURIComponent).join(',')}`,
         { headers },
       )
 
@@ -308,7 +308,7 @@ export function useVotes({ eventId, sessionIds }: UseVotesOptions): UseVotesRetu
           [
             'batchAllocate',
             identityHash,
-            eventId,
+            EVENT_ID,
             ethers.keccak256(
               ethers.solidityPacked(['bytes32[]'], [topicIdsArray]),
             ),
@@ -345,7 +345,6 @@ export function useVotes({ eventId, sessionIds }: UseVotesOptions): UseVotesRetu
         method: 'POST',
         headers,
         body: JSON.stringify({
-          eventId,
           pubKeyX: passkeyInfo.pubKeyX,
           pubKeyY: passkeyInfo.pubKeyY,
           signer: sessionKey.address,
@@ -383,7 +382,7 @@ export function useVotes({ eventId, sessionIds }: UseVotesOptions): UseVotesRetu
     } finally {
       setIsSyncing(false)
     }
-  }, [eventId, sessionToTopic, queryClient, queryKey])
+  }, [sessionToTopic, queryClient, queryKey])
 
   // Keep a stable ref to flush so effects and callbacks never go stale
   const flushRef = useRef(flush)

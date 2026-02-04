@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from '@/lib/jwt'
 import { ethers } from 'ethers'
-import { SCHELLING_POINT_QV_ABI, CONTRACT_ADDRESS } from '@/lib/contracts/SchellingPointQV'
+import { SCHELLING_POINT_QV_ABI, CONTRACT_ADDRESS, EVENT_ID } from '@/lib/contracts/SchellingPointQV'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,17 +28,16 @@ export async function POST(request: NextRequest) {
 
     // 3. Parse body
     const body = await request.json()
-    const { eventId, topicIds, credits, signature } = body as {
-      eventId: string
+    const { topicIds, credits, signature } = body as {
       topicIds: string[]
       credits: number[]
       signature: string
     }
 
     // 4. Validate input
-    if (!eventId || !topicIds || !credits || !signature) {
+    if (!topicIds || !credits || !signature) {
       return NextResponse.json(
-        { error: 'Missing required fields: eventId, topicIds, credits, signature' },
+        { error: 'Missing required fields: topicIds, credits, signature' },
         { status: 400 }
       )
     }
@@ -112,14 +111,14 @@ export async function POST(request: NextRequest) {
     console.log('Calling batchAllocate with:')
     console.log('  pubKey:', [pubKeyX, pubKeyY])
     console.log('  signer:', signerAddress)
-    console.log('  eventId:', eventId)
+    console.log('  eventId:', EVENT_ID)
     console.log('  topicIds:', topicIds)
     console.log('  credits:', credits)
 
     const tx = await contract.batchAllocate(
       [pubKeyX, pubKeyY],
       signerAddress,
-      eventId,
+      EVENT_ID,
       topicIds,
       credits,
       signature

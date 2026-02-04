@@ -17,8 +17,6 @@ export default function MyVotesPage() {
 
   const sessionIds = React.useMemo(() => apiSessions.map(s => s.id), [apiSessions])
 
-  const eventId = process.env.NEXT_PUBLIC_EVENT_ID || ''
-
   const {
     votes,
     creditsSpent,
@@ -27,7 +25,7 @@ export default function MyVotesPage() {
     isLoading: votesLoading,
     isSyncing,
     error
-  } = useVotes({ eventId, sessionIds })
+  } = useVotes({ sessionIds })
 
   const [showAllSessions, setShowAllSessions] = React.useState(false)
 

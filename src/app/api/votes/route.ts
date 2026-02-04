@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from '@/lib/jwt'
 import { ethers } from 'ethers'
-import { SCHELLING_POINT_QV_ABI, CONTRACT_ADDRESS } from '@/lib/contracts/SchellingPointQV'
+import { SCHELLING_POINT_QV_ABI, CONTRACT_ADDRESS, EVENT_ID } from '@/lib/contracts/SchellingPointQV'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,15 +27,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Get query params
     const { searchParams } = new URL(request.url)
-    const eventId = searchParams.get('eventId')
     const topicIdsParam = searchParams.get('topicIds')
-
-    if (!eventId) {
-      return NextResponse.json(
-        { error: 'Missing required query parameter: eventId' },
-        { status: 400 }
-      )
-    }
 
     if (!topicIdsParam) {
       return NextResponse.json(
@@ -75,14 +67,14 @@ export async function GET(request: NextRequest) {
     // 5. Call getAllocations for the JWT's identity
     const allocationValues: bigint[] = await contract.getAllocations(
       [pubKeyX, pubKeyY],
-      eventId,
+      EVENT_ID,
       topicIds
     )
 
     // 6. Call getRemainingBudget
     const remainingBudget: bigint = await contract.getRemainingBudget(
       [pubKeyX, pubKeyY],
-      eventId
+      EVENT_ID
     )
 
     // 7. Build allocations map: topicId -> credits

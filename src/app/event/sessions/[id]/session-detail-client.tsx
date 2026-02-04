@@ -24,7 +24,6 @@ import { VoteCounter } from '@/components/voting/vote-counter'
 import { useSession } from '@/hooks/use-session'
 import { useVotes } from '@/hooks/useVotes'
 import { useAuth } from '@/hooks'
-import { useEvent } from '@/hooks/use-event'
 
 const formatIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   talk: Mic,
@@ -39,7 +38,6 @@ export function SessionDetailClient() {
   const params = useParams()
   const sessionId = params.id as string
   const { user } = useAuth()
-  const { event } = useEvent()
 
   // Fetch session data from API
   const { session, hosts, votes: voteStats, loading, error } = useSession(sessionId)
@@ -47,7 +45,6 @@ export function SessionDetailClient() {
   // Voting - use new useVotes hook with event context
   const sessionIds = React.useMemo(() => [sessionId], [sessionId])
   const { votes, creditsRemaining: remainingCreditsFromHook, setVotes, flush } = useVotes({
-    eventId: event?.id || '',
     sessionIds,
   })
   const userVotes = votes[sessionId] || 0

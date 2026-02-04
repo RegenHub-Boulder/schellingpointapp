@@ -225,6 +225,11 @@ export const SCHELLING_POINT_QV_ABI = [
 ] as const
 
 export const CONTRACT_ADDRESS = '0x1e3703d4e2135dE24450FDA5cf18c18c66711523'
+
+/**
+ * On-chain event ID: uint256(keccak256("schelling-point-2025"))
+ * Matches Deploy.s.sol — this is the single unconference, not a per-session ID.
+ */
 export const EVENT_ID = '101310439360068229198498235905453178362848215801890223219690675748118742731958'
 
 export function getContractConfig() {

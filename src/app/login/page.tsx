@@ -219,16 +219,31 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div className="text-xs text-center text-muted-foreground space-y-2">
+            {!hasLocalPasskey && status !== 'success' && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center space-y-3">
+                <p className="text-sm font-medium">
+                  Don&apos;t have an account yet?
+                </p>
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/register">
+                    Register Here
+                  </Link>
+                </Button>
+              </div>
+            )}
+
+            <div className="text-xs text-center text-muted-foreground">
               <p>
                 Your passkey is stored securely on your device.
               </p>
-              <p>
-                Don&apos;t have an account?{' '}
-                <Link href="/register" className="text-primary hover:underline font-medium">
-                  Create one
-                </Link>
-              </p>
+              {hasLocalPasskey && (
+                <p className="mt-2">
+                  Don&apos;t have an account?{' '}
+                  <Link href="/register" className="text-primary hover:underline font-medium">
+                    Register here
+                  </Link>
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
